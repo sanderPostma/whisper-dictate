@@ -41,7 +41,7 @@ from gi.repository import Gtk, GLib, Keybinder, GdkPixbuf
 CONFIG_PATH = Path.home() / ".config" / "whisper-dictate" / "config.json"
 ICON_DIR = Path(__file__).parent / "icons"
 DEFAULT_CONFIG = {
-    "hotkey": "<Ctrl><Shift>d",
+    "hotkey": "<Alt>d",
     "model": "base",
     "language": "en",
     "sample_rate": 16000,
@@ -268,7 +268,7 @@ class WhisperDictate:
         
         # Info items
         mode = self.config.get("output_mode", "type")
-        hotkey = self.config.get("hotkey", "<Ctrl><Shift>d")
+        hotkey = self.config.get("hotkey", "<Alt>d")
         
         info1 = Gtk.MenuItem(label=f"Hotkey: {hotkey}")
         info1.set_sensitive(False)
@@ -313,7 +313,7 @@ class WhisperDictate:
     def run(self):
         """Run the application."""
         mode = self.config.get("output_mode", "type")
-        hotkey = self.config.get("hotkey", "<Ctrl><Shift>d")
+        hotkey = self.config.get("hotkey", "<Alt>d")
         
         print(f"Whisper Dictate starting...")
         print(f"Config: {CONFIG_PATH}")
@@ -380,7 +380,7 @@ def main():
     parser.add_argument(
         "--hotkey", "-k",
         default=None,
-        help="Global hotkey (e.g., '<Ctrl><Shift>d')"
+        help="Global hotkey (e.g., '<Alt>d')"
     )
     
     args = parser.parse_args()
