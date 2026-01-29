@@ -391,9 +391,30 @@ class WhisperDictate:
         info1.set_sensitive(False)
         menu.append(info1)
         
-        info3 = Gtk.MenuItem(label=f"Model: {self.config['model']}")
-        info3.set_sensitive(False)
-        menu.append(info3)
+        # Model submenu with radio items
+        model_item = Gtk.MenuItem(label=f"Model: {self.config['model']}")
+        model_submenu = Gtk.Menu()
+        
+        current_model = self.config.get("model", "base")
+        models = ["tiny", "base", "small", "medium", "large"]
+        group = None
+        self.model_items = {}
+        
+        for model_name in models:
+            if group is None:
+                radio = Gtk.RadioMenuItem(label=model_name)
+                group = radio
+            else:
+                radio = Gtk.RadioMenuItem(label=model_name, group=group)
+            
+            radio.set_active(model_name == current_model)
+            radio.connect("toggled", self.on_model_changed, model_name)
+            model_submenu.append(radio)
+            self.model_items[model_name] = radio
+        
+        model_item.set_submenu(model_submenu)
+        menu.append(model_item)
+        self.model_menu_item = model_item
         
         menu.append(Gtk.SeparatorMenuItem())
         
@@ -433,6 +454,19 @@ class WhisperDictate:
     def on_mode_clip_toggled(self, item):
         """Handle clipboard mode toggle."""
         self.update_mode()
+    
+    def on_model_changed(self, item, model_name):
+        """Handle model selection change."""
+        if item.get_active():
+            old_model = self.config.get("model", "base")
+            if model_name != old_model:
+                self.config["model"] = model_name
+                self.save_config(self.config)
+                self.model = None  # Force reload
+                self.model_menu_item.set_label(f"Model: {model_name}")
+                print(f"[whisper-dictate] Model changed to: {model_name}")
+                # Preload new model in background
+                threading.Thread(target=self.load_model, daemon=True).start()
     
     def open_settings(self, *args):
         """Open config file in editor."""
