@@ -1,0 +1,13 @@
+[Unit]
+Description=Whisper Dictate - Voice to text with system tray
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/home/sander/DEV/mine/whisper-dictate/whisper-dictate.sh
+Restart=on-failure
+RestartSec=5
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=default.target
