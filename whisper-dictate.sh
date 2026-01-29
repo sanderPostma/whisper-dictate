@@ -9,4 +9,4 @@ if [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
-exec nice -n -10 python3 whisper_dictate.py "$@"
+exec nice -n -15 python3 whisper_dictate.py "$@"
