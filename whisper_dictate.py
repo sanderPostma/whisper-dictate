@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """
 Whisper Dictate - Voice-to-text with system tray integration
-Press hotkey to record, release to transcribe and paste.
+Click tray icon or use hotkey to toggle recording.
 """
 
 import json
 import os
-import queue
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -19,12 +17,12 @@ import pystray
 import sounddevice as sd
 import whisper
 from PIL import Image, ImageDraw
-from pynput import keyboard
 
 # Config
 CONFIG_PATH = Path.home() / ".config" / "whisper-dictate" / "config.json"
+SOCKET_PATH = Path("/tmp/whisper-dictate.sock")
 DEFAULT_CONFIG = {
-    "hotkey": "<ctrl>+<shift>+d",
+    "hotkey": "ctrl+shift+d",
     "model": "base",
     "language": "en",
     "sample_rate": 16000,
@@ -37,12 +35,9 @@ class WhisperDictate:
         self.config = self.load_config()
         self.model = None
         self.recording = False
-        self.audio_queue = queue.Queue()
         self.audio_data = []
+        self.stream = None
         self.icon = None
-        self.hotkey_listener = None
-        self.current_keys = set()
-        self.hotkey_keys = self.parse_hotkey(self.config["hotkey"])
         
     def load_config(self):
         """Load config from file or create default."""
@@ -62,36 +57,12 @@ class WhisperDictate:
         with open(CONFIG_PATH, "w") as f:
             json.dump(config, f, indent=2)
     
-    def parse_hotkey(self, hotkey_str):
-        """Parse hotkey string into set of keys."""
-        keys = set()
-        parts = hotkey_str.lower().replace(">+<", "> <").replace("<", "").replace(">", "").split()
-        for part in parts:
-            if part == "ctrl":
-                keys.add(keyboard.Key.ctrl_l)
-            elif part == "shift":
-                keys.add(keyboard.Key.shift_l)
-            elif part == "alt":
-                keys.add(keyboard.Key.alt_l)
-            elif part == "super" or part == "cmd":
-                keys.add(keyboard.Key.cmd)
-            elif len(part) == 1:
-                keys.add(keyboard.KeyCode.from_char(part))
-            else:
-                # Try as function key
-                try:
-                    keys.add(getattr(keyboard.Key, part))
-                except AttributeError:
-                    keys.add(keyboard.KeyCode.from_char(part[0]))
-        return keys
-    
     def create_icon(self, color="white"):
         """Create a simple microphone icon."""
         size = 64
         img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         
-        # Microphone body
         if color == "red":
             fill = (255, 80, 80, 255)
         else:
@@ -115,7 +86,14 @@ class WhisperDictate:
         if self.model is None:
             self.notify("Loading Whisper model...")
             self.model = whisper.load_model(self.config["model"])
-            self.notify("Ready!")
+            self.notify("Ready! Click icon to record.")
+    
+    def toggle_recording(self, icon=None, item=None):
+        """Toggle recording on/off."""
+        if self.recording:
+            self.stop_recording()
+        else:
+            self.start_recording()
     
     def start_recording(self):
         """Start recording audio."""
@@ -124,9 +102,10 @@ class WhisperDictate:
         
         self.recording = True
         self.audio_data = []
-        self.icon.icon = self.create_icon("red")
+        if self.icon:
+            self.icon.icon = self.create_icon("red")
         
-        def audio_callback(indata, frames, time, status):
+        def audio_callback(indata, frames, time_info, status):
             if self.recording:
                 self.audio_data.append(indata.copy())
         
@@ -137,7 +116,7 @@ class WhisperDictate:
             callback=audio_callback
         )
         self.stream.start()
-        self.notify("Recording...")
+        self.notify("🔴 Recording... Click to stop")
     
     def stop_recording(self):
         """Stop recording and transcribe."""
@@ -145,9 +124,13 @@ class WhisperDictate:
             return
         
         self.recording = False
-        self.stream.stop()
-        self.stream.close()
-        self.icon.icon = self.create_icon("white")
+        if self.stream:
+            self.stream.stop()
+            self.stream.close()
+            self.stream = None
+        
+        if self.icon:
+            self.icon.icon = self.create_icon("white")
         
         if not self.audio_data:
             self.notify("No audio recorded")
@@ -186,19 +169,16 @@ class WhisperDictate:
     def paste_text(self, text):
         """Paste text to active window."""
         if self.config["paste_method"] == "xdotool":
-            # Use xdotool to type (handles special chars better)
             subprocess.run(
                 ["xdotool", "type", "--clearmodifiers", "--", text],
                 check=False
             )
         else:
-            # Use xclip + paste
             subprocess.run(
                 ["xclip", "-selection", "clipboard"],
                 input=text.encode(),
                 check=False
             )
-            # Small delay then paste
             time.sleep(0.1)
             subprocess.run(
                 ["xdotool", "key", "--clearmodifiers", "ctrl+shift+v"],
@@ -209,7 +189,9 @@ class WhisperDictate:
         """Show notification."""
         try:
             subprocess.run(
-                ["notify-send", "-t", "2000", "-a", "Whisper Dictate", "🎤 Whisper Dictate", message],
+                ["notify-send", "-t", "2000", "-a", "Whisper Dictate", 
+                 "-h", "string:x-canonical-private-synchronous:whisper-dictate",
+                 "🎤 Whisper Dictate", message],
                 check=False,
                 capture_output=True
             )
@@ -217,77 +199,28 @@ class WhisperDictate:
             pass
         print(f"[whisper-dictate] {message}")
     
-    def on_key_press(self, key):
-        """Handle key press."""
-        # Normalize key
-        if hasattr(key, 'char') and key.char:
-            self.current_keys.add(keyboard.KeyCode.from_char(key.char.lower()))
-        else:
-            self.current_keys.add(key)
-            # Also add generic versions for ctrl/shift/alt
-            if key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
-                self.current_keys.add(keyboard.Key.ctrl_l)
-            elif key in (keyboard.Key.shift_l, keyboard.Key.shift_r):
-                self.current_keys.add(keyboard.Key.shift_l)
-            elif key in (keyboard.Key.alt_l, keyboard.Key.alt_r):
-                self.current_keys.add(keyboard.Key.alt_l)
-        
-        # Check if hotkey pressed
-        if self.hotkey_keys.issubset(self.current_keys):
-            if not self.recording:
-                self.start_recording()
-    
-    def on_key_release(self, key):
-        """Handle key release."""
-        # If recording and any hotkey key released, stop
-        if self.recording:
-            released_key = key
-            if hasattr(key, 'char') and key.char:
-                released_key = keyboard.KeyCode.from_char(key.char.lower())
-            
-            # Check if released key is part of hotkey
-            is_hotkey_part = False
-            if released_key in self.hotkey_keys:
-                is_hotkey_part = True
-            elif key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r) and keyboard.Key.ctrl_l in self.hotkey_keys:
-                is_hotkey_part = True
-            elif key in (keyboard.Key.shift_l, keyboard.Key.shift_r) and keyboard.Key.shift_l in self.hotkey_keys:
-                is_hotkey_part = True
-            elif key in (keyboard.Key.alt_l, keyboard.Key.alt_r) and keyboard.Key.alt_l in self.hotkey_keys:
-                is_hotkey_part = True
-            
-            if is_hotkey_part:
-                self.stop_recording()
-        
-        # Clear released key
-        self.current_keys.discard(key)
-        if hasattr(key, 'char') and key.char:
-            self.current_keys.discard(keyboard.KeyCode.from_char(key.char.lower()))
-        if key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r):
-            self.current_keys.discard(keyboard.Key.ctrl_l)
-            self.current_keys.discard(keyboard.Key.ctrl_r)
-        elif key in (keyboard.Key.shift_l, keyboard.Key.shift_r):
-            self.current_keys.discard(keyboard.Key.shift_l)
-            self.current_keys.discard(keyboard.Key.shift_r)
-        elif key in (keyboard.Key.alt_l, keyboard.Key.alt_r):
-            self.current_keys.discard(keyboard.Key.alt_l)
-            self.current_keys.discard(keyboard.Key.alt_r)
-    
     def create_menu(self):
         """Create tray menu."""
         return pystray.Menu(
             pystray.MenuItem(
-                f"Hotkey: {self.config['hotkey']}",
-                None,
-                enabled=False
+                "🎤 Record/Stop",
+                self.toggle_recording,
+                default=True  # This makes it the default click action
             ),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 f"Model: {self.config['model']}",
                 None,
                 enabled=False
             ),
+            pystray.MenuItem(
+                f"Language: {self.config['language']}",
+                None,
+                enabled=False
+            ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Settings", self.open_settings),
+            pystray.MenuItem("Setup Hotkey", self.setup_hotkey),
             pystray.MenuItem("Quit", self.quit),
         )
     
@@ -295,32 +228,90 @@ class WhisperDictate:
         """Open config file in editor."""
         subprocess.run(["xdg-open", str(CONFIG_PATH)], check=False)
     
+    def setup_hotkey(self):
+        """Show instructions for hotkey setup."""
+        instructions = f"""To set up global hotkey:
+
+1. Create ~/.xbindkeysrc with:
+   "{Path(__file__).parent}/toggle-recording.sh"
+     Control+Shift+d
+
+2. Run: xbindkeys
+
+3. Add 'xbindkeys' to startup apps
+
+Current config hotkey: {self.config['hotkey']}"""
+        
+        subprocess.run(
+            ["notify-send", "-t", "10000", "🎤 Hotkey Setup", instructions],
+            check=False
+        )
+        # Also create the toggle script
+        self.create_toggle_script()
+    
+    def create_toggle_script(self):
+        """Create the toggle script for xbindkeys."""
+        script_path = Path(__file__).parent / "toggle-recording.sh"
+        script_content = '''#!/bin/bash
+# Toggle Whisper Dictate recording
+# Sends signal to running instance
+
+PIDFILE="/tmp/whisper-dictate.pid"
+
+if [ -f "$PIDFILE" ]; then
+    PID=$(cat "$PIDFILE")
+    if kill -0 "$PID" 2>/dev/null; then
+        kill -USR1 "$PID"
+        exit 0
+    fi
+fi
+
+notify-send "Whisper Dictate" "Not running! Start it first."
+'''
+        script_path.write_text(script_content)
+        script_path.chmod(0o755)
+        print(f"Created {script_path}")
+    
     def quit(self):
         """Quit application."""
+        # Remove PID file
+        pidfile = Path("/tmp/whisper-dictate.pid")
+        if pidfile.exists():
+            pidfile.unlink()
         self.icon.stop()
+    
+    def handle_signal(self, signum, frame):
+        """Handle USR1 signal to toggle recording."""
+        print(f"Received signal {signum}, toggling recording")
+        self.toggle_recording()
     
     def run(self):
         """Run the application."""
+        import signal
+        
         print(f"Whisper Dictate starting...")
         print(f"Config: {CONFIG_PATH}")
-        print(f"Hotkey: {self.config['hotkey']} (hold to record)")
+        print(f"Click tray icon to record/stop")
         
-        # Start keyboard listener
-        self.hotkey_listener = keyboard.Listener(
-            on_press=self.on_key_press,
-            on_release=self.on_key_release
-        )
-        self.hotkey_listener.start()
+        # Write PID file for signal-based toggling
+        pidfile = Path("/tmp/whisper-dictate.pid")
+        pidfile.write_text(str(os.getpid()))
+        
+        # Set up signal handler for hotkey
+        signal.signal(signal.SIGUSR1, self.handle_signal)
+        
+        # Create toggle script
+        self.create_toggle_script()
         
         # Create and run tray icon
         self.icon = pystray.Icon(
             "whisper-dictate",
             self.create_icon(),
-            "Whisper Dictate",
+            "Whisper Dictate - Click to record",
             self.create_menu()
         )
         
-        self.notify("Started! Hold hotkey to record.")
+        self.notify("Started! Click icon to record.")
         self.icon.run()
 
 
