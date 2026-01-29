@@ -97,15 +97,21 @@ class WhisperDictate:
     def apply_replacements(self, text):
         """Apply text replacements (case-insensitive matching)."""
         replacements = self.load_replacements()
+        print(f"[post-process] IN:  |{text}|")
+        
         if not replacements:
+            print(f"[post-process] No replacements loaded")
             return text
         
         for pattern, replacement in replacements.items():
             # Case-insensitive replacement using compiled regex
-            # re.escape on replacement to handle backslashes properly
             regex = re.compile(re.escape(pattern), re.IGNORECASE)
-            text = regex.sub(lambda m: replacement, text)
+            new_text = regex.sub(lambda m: replacement, text)
+            if new_text != text:
+                print(f"[post-process] Matched |{pattern}| -> |{replacement}|")
+            text = new_text
         
+        print(f"[post-process] OUT: |{text}|")
         return text
     
     def create_icons(self):
