@@ -4,7 +4,7 @@ Whisper Dictate - Voice-to-text with system tray integration
 Click tray icon or use hotkey to toggle recording.
 
 Usage:
-    whisper_dictate.py [--mode MODE]
+    whisper_dictate.py [--mode MODE] [--hotkey HOTKEY]
     
 Modes:
     type      - Type directly into active window (default)
@@ -22,16 +22,26 @@ import time
 from pathlib import Path
 
 import numpy as np
-import pystray
 import sounddevice as sd
 import whisper
-from PIL import Image, ImageDraw
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Keybinder', '3.0')
+try:
+    gi.require_version('AppIndicator3', '0.1')
+    from gi.repository import AppIndicator3 as appindicator
+    HAS_APPINDICATOR = True
+except:
+    HAS_APPINDICATOR = False
+
+from gi.repository import Gtk, GLib, Keybinder, GdkPixbuf
 
 # Config
 CONFIG_PATH = Path.home() / ".config" / "whisper-dictate" / "config.json"
-SOCKET_PATH = Path("/tmp/whisper-dictate.sock")
+ICON_DIR = Path(__file__).parent / "icons"
 DEFAULT_CONFIG = {
-    "hotkey": "ctrl+shift+d",
+    "hotkey": "<Ctrl><Shift>d",
     "model": "base",
     "language": "en",
     "sample_rate": 16000,
@@ -46,7 +56,9 @@ class WhisperDictate:
         self.recording = False
         self.audio_data = []
         self.stream = None
-        self.icon = None
+        self.indicator = None
+        self.status_item = None
+        self.create_icons()
         
     def load_config(self):
         """Load config from file or create default."""
@@ -66,43 +78,51 @@ class WhisperDictate:
         with open(CONFIG_PATH, "w") as f:
             json.dump(config, f, indent=2)
     
-    def create_icon(self, color="white"):
-        """Create a simple microphone icon."""
-        size = 64
-        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
+    def create_icons(self):
+        """Create icon files for the indicator."""
+        ICON_DIR.mkdir(parents=True, exist_ok=True)
         
-        if color == "red":
-            fill = (255, 80, 80, 255)
-        else:
-            fill = (255, 255, 255, 255)
+        # Create simple SVG icons
+        icon_idle = '''<?xml version="1.0" encoding="UTF-8"?>
+<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="11" cy="8" r="4" fill="#ffffff" stroke="#888888" stroke-width="1"/>
+  <rect x="9" y="11" width="4" height="4" fill="#ffffff" stroke="#888888" stroke-width="1"/>
+  <path d="M 6 14 Q 6 18 11 18 Q 16 18 16 14" fill="none" stroke="#888888" stroke-width="1.5"/>
+  <line x1="11" y1="18" x2="11" y2="21" stroke="#888888" stroke-width="1.5"/>
+  <line x1="7" y1="21" x2="15" y2="21" stroke="#888888" stroke-width="1.5"/>
+</svg>'''
         
-        # Mic head (oval)
-        draw.ellipse([20, 8, 44, 36], fill=fill)
-        # Mic body (rectangle)
-        draw.rectangle([24, 28, 40, 42], fill=fill)
-        # Stand arc
-        draw.arc([16, 28, 48, 52], 0, 180, fill=fill, width=3)
-        # Stand line
-        draw.line([32, 52, 32, 58], fill=fill, width=3)
-        # Base
-        draw.line([22, 58, 42, 58], fill=fill, width=3)
+        icon_recording = '''<?xml version="1.0" encoding="UTF-8"?>
+<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="11" cy="8" r="4" fill="#ff4444" stroke="#cc0000" stroke-width="1"/>
+  <rect x="9" y="11" width="4" height="4" fill="#ff4444" stroke="#cc0000" stroke-width="1"/>
+  <path d="M 6 14 Q 6 18 11 18 Q 16 18 16 14" fill="none" stroke="#cc0000" stroke-width="1.5"/>
+  <line x1="11" y1="18" x2="11" y2="21" stroke="#cc0000" stroke-width="1.5"/>
+  <line x1="7" y1="21" x2="15" y2="21" stroke="#cc0000" stroke-width="1.5"/>
+</svg>'''
         
-        return img
+        (ICON_DIR / "mic-idle.svg").write_text(icon_idle)
+        (ICON_DIR / "mic-recording.svg").write_text(icon_recording)
     
     def load_model(self):
         """Load Whisper model (lazy loading)."""
         if self.model is None:
             self.notify("Loading Whisper model...")
             self.model = whisper.load_model(self.config["model"])
-            self.notify("Ready! Click icon to record.")
+            self.notify("Ready!")
     
-    def toggle_recording(self, icon=None, item=None):
+    def toggle_recording(self, *args):
         """Toggle recording on/off."""
+        # Run in main thread via GLib
+        GLib.idle_add(self._toggle_recording_impl)
+    
+    def _toggle_recording_impl(self):
+        """Actual toggle implementation (runs in main thread)."""
         if self.recording:
             self.stop_recording()
         else:
             self.start_recording()
+        return False
     
     def start_recording(self):
         """Start recording audio."""
@@ -111,8 +131,8 @@ class WhisperDictate:
         
         self.recording = True
         self.audio_data = []
-        if self.icon:
-            self.icon.icon = self.create_icon("red")
+        self.update_icon(True)
+        self.update_status("🔴 Recording...")
         
         def audio_callback(indata, frames, time_info, status):
             if self.recording:
@@ -125,7 +145,7 @@ class WhisperDictate:
             callback=audio_callback
         )
         self.stream.start()
-        self.notify("🔴 Recording... Click to stop")
+        self.notify("🔴 Recording... Press hotkey or click to stop")
     
     def stop_recording(self):
         """Stop recording and transcribe."""
@@ -138,11 +158,12 @@ class WhisperDictate:
             self.stream.close()
             self.stream = None
         
-        if self.icon:
-            self.icon.icon = self.create_icon("white")
+        self.update_icon(False)
+        self.update_status("Processing...")
         
         if not self.audio_data:
             self.notify("No audio recorded")
+            self.update_status("Ready")
             return
         
         # Concatenate audio
@@ -153,7 +174,7 @@ class WhisperDictate:
     
     def transcribe_and_paste(self, audio):
         """Transcribe audio and paste result."""
-        self.notify("Transcribing...")
+        GLib.idle_add(lambda: self.update_status("Transcribing..."))
         
         # Ensure model is loaded
         self.load_model()
@@ -168,14 +189,14 @@ class WhisperDictate:
         text = result["text"].strip()
         
         if not text:
-            self.notify("No speech detected")
+            GLib.idle_add(lambda: self.notify("No speech detected"))
+            GLib.idle_add(lambda: self.update_status("Ready"))
             return
         
-        # Copy to clipboard
-        self.paste_text(text)
-        print(f"Transcribed: {text}")
+        # Output based on mode
+        GLib.idle_add(lambda: self.output_text(text))
     
-    def paste_text(self, text):
+    def output_text(self, text):
         """Output text based on mode (type/clipboard/both)."""
         mode = self.config.get("output_mode", "type")
         
@@ -200,6 +221,9 @@ class WhisperDictate:
             self.notify(f"✓ Typed + copied")
         else:
             self.notify(f"✓ Typed")
+        
+        self.update_status("Ready")
+        print(f"Transcribed: {text}")
     
     def notify(self, message):
         """Show notification."""
@@ -215,66 +239,121 @@ class WhisperDictate:
             pass
         print(f"[whisper-dictate] {message}")
     
-    def create_menu(self):
-        """Create tray menu."""
-        mode = self.config.get("output_mode", "type")
-        return pystray.Menu(
-            pystray.MenuItem(
-                "🎤 Record/Stop",
-                self.toggle_recording,
-                default=True  # This makes it the default click action
-            ),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem(
-                f"Mode: {mode}",
-                None,
-                enabled=False
-            ),
-            pystray.MenuItem(
-                f"Model: {self.config['model']}",
-                None,
-                enabled=False
-            ),
-            pystray.MenuItem(
-                f"Language: {self.config['language']}",
-                None,
-                enabled=False
-            ),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Settings", self.open_settings),
-            pystray.MenuItem("Quit", self.quit),
-        )
+    def update_icon(self, recording):
+        """Update tray icon."""
+        if self.indicator:
+            icon_name = "mic-recording" if recording else "mic-idle"
+            self.indicator.set_icon_full(str(ICON_DIR / f"{icon_name}.svg"), "Whisper Dictate")
     
-    def open_settings(self):
+    def update_status(self, status):
+        """Update status in menu."""
+        if self.status_item:
+            self.status_item.set_label(f"Status: {status}")
+    
+    def create_menu(self):
+        """Create indicator menu."""
+        menu = Gtk.Menu()
+        
+        # Record/Stop button
+        record_item = Gtk.MenuItem(label="🎤 Record/Stop")
+        record_item.connect("activate", self.toggle_recording)
+        menu.append(record_item)
+        
+        menu.append(Gtk.SeparatorMenuItem())
+        
+        # Status
+        self.status_item = Gtk.MenuItem(label="Status: Ready")
+        self.status_item.set_sensitive(False)
+        menu.append(self.status_item)
+        
+        # Info items
+        mode = self.config.get("output_mode", "type")
+        hotkey = self.config.get("hotkey", "<Ctrl><Shift>d")
+        
+        info1 = Gtk.MenuItem(label=f"Hotkey: {hotkey}")
+        info1.set_sensitive(False)
+        menu.append(info1)
+        
+        info2 = Gtk.MenuItem(label=f"Mode: {mode}")
+        info2.set_sensitive(False)
+        menu.append(info2)
+        
+        info3 = Gtk.MenuItem(label=f"Model: {self.config['model']}")
+        info3.set_sensitive(False)
+        menu.append(info3)
+        
+        menu.append(Gtk.SeparatorMenuItem())
+        
+        # Settings
+        settings_item = Gtk.MenuItem(label="Settings")
+        settings_item.connect("activate", self.open_settings)
+        menu.append(settings_item)
+        
+        # Quit
+        quit_item = Gtk.MenuItem(label="Quit")
+        quit_item.connect("activate", self.quit)
+        menu.append(quit_item)
+        
+        menu.show_all()
+        return menu
+    
+    def open_settings(self, *args):
         """Open config file in editor."""
         subprocess.run(["xdg-open", str(CONFIG_PATH)], check=False)
     
-    def quit(self):
+    def quit(self, *args):
         """Quit application."""
-        # Remove PID file
-        pidfile = Path("/tmp/whisper-dictate.pid")
-        if pidfile.exists():
-            pidfile.unlink()
-        self.icon.stop()
+        Gtk.main_quit()
+    
+    def on_hotkey(self, keystring):
+        """Handle global hotkey press."""
+        print(f"Hotkey pressed: {keystring}")
+        self.toggle_recording()
     
     def run(self):
         """Run the application."""
         mode = self.config.get("output_mode", "type")
+        hotkey = self.config.get("hotkey", "<Ctrl><Shift>d")
+        
         print(f"Whisper Dictate starting...")
         print(f"Config: {CONFIG_PATH}")
         print(f"Mode: {mode} | Model: {self.config['model']} | Language: {self.config['language']}")
-        print(f"Click tray icon to record/stop")
+        print(f"Hotkey: {hotkey}")
+        print(f"Click tray icon or press hotkey to record")
         
-        # Create and run tray icon
-        self.icon = pystray.Icon(
-            "whisper-dictate",
-            self.create_icon(),
-            "Whisper Dictate - Click to record",
-            self.create_menu()
-        )
+        # Initialize keybinder
+        Keybinder.init()
+        if Keybinder.bind(hotkey, self.on_hotkey):
+            print(f"✓ Hotkey {hotkey} registered")
+        else:
+            print(f"✗ Failed to register hotkey {hotkey}")
         
-        self.notify("Started! Click icon to record.")
-        self.icon.run()
+        # Create indicator
+        if HAS_APPINDICATOR:
+            self.indicator = appindicator.Indicator.new(
+                "whisper-dictate",
+                str(ICON_DIR / "mic-idle.svg"),
+                appindicator.IndicatorCategory.APPLICATION_STATUS
+            )
+            self.indicator.set_status(appindicator.IndicatorStatus.ACTIVE)
+            self.indicator.set_menu(self.create_menu())
+        else:
+            # Fallback: just use a status icon (deprecated but works)
+            print("AppIndicator not available, using StatusIcon")
+            self.indicator = Gtk.StatusIcon()
+            self.indicator.set_from_file(str(ICON_DIR / "mic-idle.svg"))
+            self.indicator.set_tooltip_text("Whisper Dictate")
+            self.indicator.connect("activate", self.toggle_recording)
+            self.indicator.connect("popup-menu", lambda icon, button, time: 
+                self.create_menu().popup(None, None, None, None, button, time))
+        
+        self.notify(f"Started! Hotkey: {hotkey}")
+        
+        # Run GTK main loop
+        Gtk.main()
+        
+        # Cleanup
+        Keybinder.unbind(hotkey)
 
 
 def main():
@@ -298,6 +377,11 @@ def main():
         default=None,
         help="Language code (e.g., en, nl, de)"
     )
+    parser.add_argument(
+        "--hotkey", "-k",
+        default=None,
+        help="Global hotkey (e.g., '<Ctrl><Shift>d')"
+    )
     
     args = parser.parse_args()
     
@@ -310,6 +394,8 @@ def main():
         app.config["model"] = args.model
     if args.language:
         app.config["language"] = args.language
+    if args.hotkey:
+        app.config["hotkey"] = args.hotkey
     
     app.run()
 
