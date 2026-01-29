@@ -302,6 +302,8 @@ class WhisperDictate:
         self.load_model()
         
         # Transcribe based on backend
+        start_time = time.time()
+        
         if getattr(self, '_model_backend', 'whisper') == 'transformers':
             # Transformers pipeline expects dict with array and sampling_rate
             result = self.model({
@@ -317,6 +319,9 @@ class WhisperDictate:
                 fp16=False  # CPU mode
             )
             text = result["text"].strip()
+        
+        elapsed = time.time() - start_time
+        print(f"[whisper-dictate] Transcription took {elapsed:.2f}s")
         
         if not text:
             GLib.idle_add(lambda: self.update_status("Ready"))
