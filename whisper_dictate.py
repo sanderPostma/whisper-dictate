@@ -186,6 +186,7 @@ class WhisperDictate:
             callback=audio_callback
         )
         self.stream.start()
+        self.beep_start()
         self.notify("🔴 Recording...")
     
     def stop_recording(self):
@@ -199,6 +200,7 @@ class WhisperDictate:
             self.stream.close()
             self.stream = None
         
+        self.beep_stop()
         self.update_icon(False)
         self.update_status("Processing...")
         
@@ -260,6 +262,28 @@ class WhisperDictate:
         self.update_status("Ready")
         print(f"Transcribed: {text}")
     
+    def beep(self, frequency=800, duration=0.1):
+        """Play a short beep sound."""
+        try:
+            sample_rate = 22050
+            t = np.linspace(0, duration, int(sample_rate * duration), False)
+            tone = np.sin(frequency * 2 * np.pi * t) * 0.3
+            # Fade in/out to avoid clicks
+            fade_len = int(sample_rate * 0.01)
+            tone[:fade_len] *= np.linspace(0, 1, fade_len)
+            tone[-fade_len:] *= np.linspace(1, 0, fade_len)
+            sd.play(tone.astype(np.float32), sample_rate, blocking=False)
+        except Exception as e:
+            print(f"[whisper-dictate] Beep failed: {e}")
+    
+    def beep_start(self):
+        """Beep for recording start (higher tone)."""
+        self.beep(frequency=1200, duration=0.08)
+    
+    def beep_stop(self):
+        """Beep for recording stop (lower tone)."""
+        self.beep(frequency=800, duration=0.08)
+    
     def notify(self, message):
         """Show notification."""
         try:
@@ -301,17 +325,29 @@ class WhisperDictate:
         self.status_item.set_sensitive(False)
         menu.append(self.status_item)
         
-        # Info items
+        # Mode toggles
         mode = self.config.get("output_mode", "type")
+        
+        mode_type = Gtk.CheckMenuItem(label="Mode: Type")
+        mode_type.set_active(mode in ("type", "both"))
+        mode_type.connect("toggled", self.on_mode_type_toggled)
+        menu.append(mode_type)
+        self.mode_type_item = mode_type
+        
+        mode_clip = Gtk.CheckMenuItem(label="Mode: Clipboard")
+        mode_clip.set_active(mode in ("clipboard", "both"))
+        mode_clip.connect("toggled", self.on_mode_clip_toggled)
+        menu.append(mode_clip)
+        self.mode_clip_item = mode_clip
+        
+        menu.append(Gtk.SeparatorMenuItem())
+        
+        # Info items
         hotkey = self.config.get("hotkey", "<Alt>d")
         
         info1 = Gtk.MenuItem(label=f"Hotkey: {hotkey}")
         info1.set_sensitive(False)
         menu.append(info1)
-        
-        info2 = Gtk.MenuItem(label=f"Mode: {mode}")
-        info2.set_sensitive(False)
-        menu.append(info2)
         
         info3 = Gtk.MenuItem(label=f"Model: {self.config['model']}")
         info3.set_sensitive(False)
@@ -331,6 +367,30 @@ class WhisperDictate:
         
         menu.show_all()
         return menu
+    
+    def update_mode(self):
+        """Update output mode based on checkbox states."""
+        type_on = self.mode_type_item.get_active()
+        clip_on = self.mode_clip_item.get_active()
+        
+        if type_on and clip_on:
+            mode = "both"
+        elif clip_on:
+            mode = "clipboard"
+        else:
+            mode = "type"
+        
+        self.config["output_mode"] = mode
+        self.save_config(self.config)
+        print(f"[whisper-dictate] Mode changed to: {mode}")
+    
+    def on_mode_type_toggled(self, item):
+        """Handle type mode toggle."""
+        self.update_mode()
+    
+    def on_mode_clip_toggled(self, item):
+        """Handle clipboard mode toggle."""
+        self.update_mode()
     
     def open_settings(self, *args):
         """Open config file in editor."""
