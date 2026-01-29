@@ -1,16 +1,18 @@
 # Whisper Dictate 🎤
 
-Voice-to-text dictation with system tray integration. Hold a hotkey to record, release to transcribe and paste.
+Voice-to-text dictation with system tray integration. Press hotkey to record, press again to transcribe and type.
 
 Uses OpenAI's Whisper for accurate speech recognition with full context understanding.
 
 ## Features
 
 - **System tray icon** - Shows recording status (white = idle, red = recording)
-- **Global hotkey** - Hold to record, release to transcribe
-- **Auto-paste** - Transcribed text is automatically typed into the active window
-- **Desktop notifications** - Visual feedback for recording/transcription status
-- **Configurable** - Customize hotkey, model size, language
+- **Global hotkey** - Press to start/stop recording (default: Alt+D)
+- **Audio feedback** - Different beep tones for start/stop recording
+- **Multiple output modes** - Type directly, copy to clipboard, or both
+- **Text replacements** - Post-process transcriptions (e.g., "slash" → "/", "enter" → execute)
+- **Desktop notifications** - Visual feedback for recording status
+- **Configurable** - Customize hotkey, model size, language, output mode
 
 ## Installation
 
@@ -18,7 +20,7 @@ Uses OpenAI's Whisper for accurate speech recognition with full context understa
 
 ```bash
 # Ubuntu/Debian
-sudo apt install xdotool xclip libportaudio2 python3-gi gir1.2-appindicator3-0.1
+sudo apt install xdotool xclip libportaudio2 python3-gi gir1.2-appindicator3-0.1 gir1.2-keybinder-3.0
 ```
 
 ### Install
@@ -27,8 +29,8 @@ sudo apt install xdotool xclip libportaudio2 python3-gi gir1.2-appindicator3-0.1
 # Clone the repo
 cd /path/to/whisper-dictate
 
-# Create virtual environment
-python3 -m venv venv
+# Create virtual environment with system packages (needed for GTK)
+python3 -m venv --system-site-packages venv
 source venv/bin/activate
 
 # Install dependencies
@@ -38,44 +40,74 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
-# Activate venv and run
-source venv/bin/activate
-python whisper_dictate.py
+./whisper-dictate.sh
 ```
 
-Or use the launcher script:
+Or with options:
 ```bash
-./whisper-dictate.sh
+./whisper-dictate.sh --mode both --model small --language nl
 ```
 
 ### Default Hotkey
 
-**Ctrl+Shift+D** - Hold to record, release to transcribe and paste
+**Alt+D** - Press to start recording, press again to stop and transcribe
 
-### Configuration
+### System Tray Menu
+
+- **Record/Stop** - Toggle recording
+- **Mode: Type** - Check to type into active window
+- **Mode: Clipboard** - Check to copy to clipboard
+- **Settings** - Open config file
+
+## Configuration
+
+### Main Config
 
 Edit `~/.config/whisper-dictate/config.json`:
 
 ```json
 {
-  "hotkey": "<ctrl>+<shift>+d",
+  "hotkey": "<Alt>d",
   "model": "base",
   "language": "en",
-  "sample_rate": 16000,
-  "paste_method": "xdotool"
+  "output_mode": "type"
 }
 ```
 
-#### Options
-
 | Setting | Description | Options |
 |---------|-------------|---------|
-| `hotkey` | Key combination to hold | `<ctrl>`, `<shift>`, `<alt>`, `<super>`, letters |
+| `hotkey` | Global hotkey | `<Ctrl>`, `<Shift>`, `<Alt>`, `<Super>` + key |
 | `model` | Whisper model size | `tiny`, `base`, `small`, `medium`, `large` |
 | `language` | Language code | `en`, `nl`, `de`, etc. |
-| `paste_method` | How to insert text | `xdotool` (types), `xclip` (pastes) |
+| `output_mode` | How to output text | `type`, `clipboard`, `both` |
 
-#### Model Comparison
+### Text Replacements
+
+Create `~/.config/whisper-dictate/replacements.yml` to post-process transcriptions:
+
+```yaml
+replacements:
+  # Symbols
+  "slash ": "/"
+  "backslash ": "\\"
+  
+  # Commands - say "enter" to execute in terminal
+  ", enter.": "\n"
+  " enter": "\n"
+  
+  # Fix common mishearings
+  "djamal": "yaml"
+```
+
+See `replacements.example.yml` for a full example.
+
+**Features:**
+- Case-insensitive matching
+- Handles Whisper's auto-punctuation (e.g., ", enter." → newline)
+- Trailing periods are automatically removed
+- Add trailing space to patterns to avoid partial matches
+
+## Model Comparison
 
 | Model | Speed (CPU) | Accuracy | VRAM |
 |-------|-------------|----------|------|
@@ -87,19 +119,10 @@ Edit `~/.config/whisper-dictate/config.json`:
 
 ## Autostart
 
-To start on login, add to your desktop's startup applications:
+The installer creates a desktop entry. To enable autostart:
 
 ```bash
-/home/sander/DEV/mine/whisper-dictate/whisper-dictate.sh
-```
-
-Or create a systemd user service:
-
-```bash
-mkdir -p ~/.config/systemd/user
-cp whisper-dictate.service ~/.config/systemd/user/
-systemctl --user enable whisper-dictate
-systemctl --user start whisper-dictate
+cp ~/.local/share/applications/whisper-dictate.desktop ~/.config/autostart/
 ```
 
 ## Troubleshooting
@@ -109,8 +132,8 @@ systemctl --user start whisper-dictate
 - Test recording: `rec test.wav`
 
 ### Hotkey not working
-- May need to run without Wayland (X11) for global hotkeys
-- Try running with sudo for input access (not recommended for daily use)
+- Ensure you're on X11 (not Wayland)
+- Check if another app uses the same hotkey
 
 ### Tray icon not showing
 - Install appindicator: `sudo apt install gir1.2-appindicator3-0.1`

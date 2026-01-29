@@ -1,0 +1,71 @@
+# Whisper Dictate - Text Replacements
+# Format: "spoken phrase": "replacement"
+# Matching is case-insensitive
+# Note: Whisper adds punctuation, so include variants with . and ,
+
+replacements:
+  # Common misheard words
+  "djamal": "yaml"
+  "djamal ": "yaml "
+  "dojamo": ".yaml"
+  "do nejamo": ".yaml"
+  "dot yaml": ".yaml"
+  "dot djamal": ".yaml"
+  ".yaml ": ".yaml"
+  "Kator": "KTOR"
+  "Kator": "KTOR"
+  
+  # Punctuation (spoken) - with spelling variants
+  "slash ": "/"
+  "shlash ": "/"
+  "sleshe ": "/"
+  "slesh ": "/"
+  "backslash ": "\\"
+  "dot ": "."
+  "colon ": ": "
+  "semicolon ": "; "
+  "question mark": "?"
+  "exclamation mark": "!"
+  "exclamation point": "!"
+  "open paren ": "("
+  "close paren ": ")"
+  "open bracket ": "["
+  "close bracket ": "]"
+  "open brace ": "{"
+  "close brace ": "}"
+  
+  # Symbols
+  "at sign ": "@"
+  "hash ": "#"
+  "dollar sign ": "$"
+  "percent ": "%"
+  "ampersand ": "&"
+  "asterisk ": "*"
+  "plus sign ": "+"
+  "equals sign ": "="
+  "pipe ": "|"
+  "tilde ": "~"
+  
+  # Terminal/keyboard actions (with punctuation cleanup)
+  # Order matters - match longer patterns first
+  ", enter.": "\n"
+  ", enter,": "\n"
+  ", enter": "\n"
+  ",enter.": "\n"
+  ",enter": "\n"
+  " enter.": "\n"
+  " enter,": "\n"
+  " enter": "\n"
+  "enter.": "\n"
+  "enter,": "\n"
+  "enter": "\n"
+  ", press enter.": "\n"
+  ", press enter": "\n"
+  " press enter.": "\n"
+  " press enter": "\n"
+  "press enter": "\n"
+  ", new line.": "\n"
+  " new line.": "\n"
+  "new line": "\n"
+  "newline": "\n"
+  "new paragraph": "\n\n"
