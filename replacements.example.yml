@@ -6,15 +6,15 @@
 replacements:
   # Common misheard words
   "djamal": "yaml"
-  "djamal": "yaml "
   "dojamo": ".yaml"
   "do nejamo": ".yaml"
   "dot yaml": ".yaml"
   "dot djamal": ".yaml"
   ".yaml": ".yaml"
   ".jammal": ".yaml"
-  "Kator": "KTOR"
-  "Kator!": "KTOR"
+  "kator": "KTOR"
+  "kator!": "KTOR"
+  "d-bug": "debug"
   
   # Punctuation (spoken) - with spelling variants
   "slash": "/"

@@ -202,7 +202,6 @@ class WhisperDictate:
         )
         self.stream.start()
         self.beep_start()
-        self.notify("🔴 Recording...")
     
     def stop_recording(self):
         """Stop recording and transcribe."""
