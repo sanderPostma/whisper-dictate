@@ -396,7 +396,7 @@ class WhisperDictate:
         model_submenu = Gtk.Menu()
         
         current_model = self.config.get("model", "base")
-        models = ["tiny", "base", "small", "medium", "large"]
+        models = ["tiny", "base", "small", "medium", "large", "turbo"]
         group = None
         self.model_items = {}
         
