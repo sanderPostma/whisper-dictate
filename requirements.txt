@@ -4,3 +4,4 @@ sounddevice
 pystray
 pynput
 pillow
+pyyaml

@@ -15,6 +15,7 @@ Modes:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -24,6 +25,7 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 import whisper
+import yaml
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -38,7 +40,9 @@ except:
 from gi.repository import Gtk, GLib, Keybinder, GdkPixbuf
 
 # Config
-CONFIG_PATH = Path.home() / ".config" / "whisper-dictate" / "config.json"
+CONFIG_DIR = Path.home() / ".config" / "whisper-dictate"
+CONFIG_PATH = CONFIG_DIR / "config.json"
+REPLACEMENTS_PATH = CONFIG_DIR / "replacements.yml"
 ICON_DIR = Path(__file__).parent / "icons"
 DEFAULT_CONFIG = {
     "hotkey": "<Alt>d",
@@ -77,6 +81,30 @@ class WhisperDictate:
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(CONFIG_PATH, "w") as f:
             json.dump(config, f, indent=2)
+    
+    def load_replacements(self):
+        """Load text replacements from YAML file."""
+        if not REPLACEMENTS_PATH.exists():
+            return {}
+        try:
+            with open(REPLACEMENTS_PATH) as f:
+                data = yaml.safe_load(f)
+                return data.get("replacements", {}) if data else {}
+        except Exception as e:
+            print(f"[whisper-dictate] Error loading replacements: {e}")
+            return {}
+    
+    def apply_replacements(self, text):
+        """Apply text replacements (case-insensitive matching)."""
+        replacements = self.load_replacements()
+        if not replacements:
+            return text
+        
+        for pattern, replacement in replacements.items():
+            # Case-insensitive replacement
+            text = re.sub(re.escape(pattern), replacement, text, flags=re.IGNORECASE)
+        
+        return text
     
     def create_icons(self):
         """Create icon files for the indicator."""
@@ -190,6 +218,9 @@ class WhisperDictate:
         if not text:
             GLib.idle_add(lambda: self.update_status("Ready"))
             return
+        
+        # Apply text replacements
+        text = self.apply_replacements(text)
         
         # Output based on mode
         GLib.idle_add(lambda: self.output_text(text))
