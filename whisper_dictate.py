@@ -101,8 +101,10 @@ class WhisperDictate:
             return text
         
         for pattern, replacement in replacements.items():
-            # Case-insensitive replacement
-            text = re.sub(re.escape(pattern), replacement, text, flags=re.IGNORECASE)
+            # Case-insensitive replacement using compiled regex
+            # re.escape on replacement to handle backslashes properly
+            regex = re.compile(re.escape(pattern), re.IGNORECASE)
+            text = regex.sub(lambda m: replacement, text)
         
         return text
     
