@@ -111,6 +111,11 @@ class WhisperDictate:
                 print(f"[post-process] Matched |{pattern}| -> |{replacement}|")
             text = new_text
         
+        # Remove trailing period (but keep periods between sentences)
+        if text.endswith('.'):
+            text = text[:-1]
+            print(f"[post-process] Removed trailing period")
+        
         print(f"[post-process] OUT: |{text}|")
         return text
     
