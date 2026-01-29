@@ -104,17 +104,32 @@ class WhisperDictate:
             return text
         
         for pattern, replacement in replacements.items():
-            # Case-insensitive replacement using compiled regex
-            regex = re.compile(re.escape(pattern), re.IGNORECASE)
+            # Determine if we should trim spaces around the replacement
+            is_single_char = len(replacement) == 1
+            is_escape_seq = replacement in ('\n', '\t', '\r', '\\')
+            is_dot_prefix = replacement.startswith('.')
+            should_trim_spaces = is_single_char or is_escape_seq or is_dot_prefix
+            
+            if should_trim_spaces:
+                # Match pattern with optional surrounding spaces
+                regex = re.compile(r'\s*' + re.escape(pattern.strip()) + r'\s*', re.IGNORECASE)
+            else:
+                regex = re.compile(re.escape(pattern), re.IGNORECASE)
+            
             new_text = regex.sub(lambda m: replacement, text)
             if new_text != text:
-                print(f"[post-process] Matched |{pattern}| -> |{replacement}|")
+                print(f"[post-process] Matched |{pattern}| -> |{replacement}| (trim={should_trim_spaces})")
             text = new_text
         
         # Remove trailing period (but keep periods between sentences)
         if text.endswith('.'):
             text = text[:-1]
             print(f"[post-process] Removed trailing period")
+        
+        # Lowercase single words (no spaces)
+        if ' ' not in text.strip():
+            text = text.lower()
+            print(f"[post-process] Lowercased single word")
         
         print(f"[post-process] OUT: |{text}|")
         return text
