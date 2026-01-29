@@ -162,28 +162,19 @@ class WhisperDictate:
             self.notify("No speech detected")
             return
         
-        # Paste
+        # Copy to clipboard
         self.paste_text(text)
-        self.notify(f"✓ {text[:50]}{'...' if len(text) > 50 else ''}")
+        print(f"Transcribed: {text}")
     
     def paste_text(self, text):
-        """Paste text to active window."""
-        if self.config["paste_method"] == "xdotool":
-            subprocess.run(
-                ["xdotool", "type", "--clearmodifiers", "--", text],
-                check=False
-            )
-        else:
-            subprocess.run(
-                ["xclip", "-selection", "clipboard"],
-                input=text.encode(),
-                check=False
-            )
-            time.sleep(0.1)
-            subprocess.run(
-                ["xdotool", "key", "--clearmodifiers", "ctrl+shift+v"],
-                check=False
-            )
+        """Copy text to clipboard."""
+        # Always copy to clipboard - user can paste where they want
+        subprocess.run(
+            ["xclip", "-selection", "clipboard"],
+            input=text.encode(),
+            check=False
+        )
+        self.notify(f"📋 Copied! Ctrl+V to paste")
     
     def notify(self, message):
         """Show notification."""
