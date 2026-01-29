@@ -107,9 +107,9 @@ class WhisperDictate:
     def load_model(self):
         """Load Whisper model (lazy loading)."""
         if self.model is None:
-            self.notify("Loading Whisper model...")
+            print("[whisper-dictate] Loading Whisper model...")
             self.model = whisper.load_model(self.config["model"])
-            self.notify("Ready!")
+            print("[whisper-dictate] Model loaded")
     
     def toggle_recording(self, *args):
         """Toggle recording on/off."""
@@ -145,7 +145,7 @@ class WhisperDictate:
             callback=audio_callback
         )
         self.stream.start()
-        self.notify("🔴 Recording... Press hotkey or click to stop")
+        self.notify("🔴 Recording...")
     
     def stop_recording(self):
         """Stop recording and transcribe."""
@@ -162,7 +162,6 @@ class WhisperDictate:
         self.update_status("Processing...")
         
         if not self.audio_data:
-            self.notify("No audio recorded")
             self.update_status("Ready")
             return
         
@@ -189,7 +188,6 @@ class WhisperDictate:
         text = result["text"].strip()
         
         if not text:
-            GLib.idle_add(lambda: self.notify("No speech detected"))
             GLib.idle_add(lambda: self.update_status("Ready"))
             return
         
@@ -214,13 +212,6 @@ class WhisperDictate:
                 ["xdotool", "type", "--clearmodifiers", "--delay", "12", "--", text],
                 check=False
             )
-        
-        if mode == "clipboard":
-            self.notify(f"📋 Copied! Ctrl+V to paste")
-        elif mode == "both":
-            self.notify(f"✓ Typed + copied")
-        else:
-            self.notify(f"✓ Typed")
         
         self.update_status("Ready")
         print(f"Transcribed: {text}")
@@ -347,7 +338,7 @@ class WhisperDictate:
             self.indicator.connect("popup-menu", lambda icon, button, time: 
                 self.create_menu().popup(None, None, None, None, button, time))
         
-        self.notify(f"Started! Hotkey: {hotkey}")
+        print(f"✓ Started")
         
         # Run GTK main loop
         Gtk.main()
