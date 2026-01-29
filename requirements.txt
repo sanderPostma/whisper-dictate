@@ -5,3 +5,5 @@ pystray
 pynput
 pillow
 pyyaml
+transformers
+accelerate

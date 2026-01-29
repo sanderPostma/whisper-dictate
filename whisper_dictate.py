@@ -27,6 +27,13 @@ import sounddevice as sd
 import whisper
 import yaml
 
+# Optional: transformers for distil-whisper models
+try:
+    from transformers import pipeline as hf_pipeline
+    HAS_TRANSFORMERS = True
+except ImportError:
+    HAS_TRANSFORMERS = False
+
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Keybinder', '3.0')
@@ -160,12 +167,43 @@ class WhisperDictate:
         (ICON_DIR / "mic-idle.svg").write_text(icon_idle)
         (ICON_DIR / "mic-recording.svg").write_text(icon_recording)
     
+    def is_distil_model(self, model_name=None):
+        """Check if model is a distil-whisper model."""
+        if model_name is None:
+            model_name = self.config.get("model", "base")
+        return model_name.startswith("distil-")
+    
     def load_model(self):
         """Load Whisper model (lazy loading)."""
-        if self.model is None:
-            print("[whisper-dictate] Loading Whisper model...")
-            self.model = whisper.load_model(self.config["model"])
-            print("[whisper-dictate] Model loaded")
+        model_name = self.config.get("model", "base")
+        
+        # Check if we need to reload (model changed)
+        current_model_name = getattr(self, '_loaded_model_name', None)
+        if self.model is not None and current_model_name == model_name:
+            return
+        
+        print(f"[whisper-dictate] Loading model: {model_name}...")
+        
+        if self.is_distil_model(model_name):
+            # Use transformers pipeline for distil models
+            if not HAS_TRANSFORMERS:
+                print("[whisper-dictate] ERROR: transformers not installed for distil models")
+                return
+            hf_model = f"distil-whisper/{model_name}"
+            self.model = hf_pipeline(
+                "automatic-speech-recognition",
+                model=hf_model,
+                chunk_length_s=30,
+                device="cpu"
+            )
+            self._model_backend = "transformers"
+        else:
+            # Use openai-whisper for standard models
+            self.model = whisper.load_model(model_name)
+            self._model_backend = "whisper"
+        
+        self._loaded_model_name = model_name
+        print(f"[whisper-dictate] Model loaded (backend: {self._model_backend})")
     
     def get_focused_window(self):
         """Get currently focused window ID."""
@@ -263,14 +301,22 @@ class WhisperDictate:
         # Ensure model is loaded
         self.load_model()
         
-        # Transcribe
-        result = self.model.transcribe(
-            audio,
-            language=self.config["language"],
-            fp16=False  # CPU mode
-        )
-        
-        text = result["text"].strip()
+        # Transcribe based on backend
+        if getattr(self, '_model_backend', 'whisper') == 'transformers':
+            # Transformers pipeline expects dict with array and sampling_rate
+            result = self.model({
+                "array": audio,
+                "sampling_rate": self.config["sample_rate"]
+            })
+            text = result.get("text", "").strip()
+        else:
+            # OpenAI whisper
+            result = self.model.transcribe(
+                audio,
+                language=self.config["language"],
+                fp16=False  # CPU mode
+            )
+            text = result["text"].strip()
         
         if not text:
             GLib.idle_add(lambda: self.update_status("Ready"))
@@ -401,12 +447,22 @@ class WhisperDictate:
             "base.en", "base",
             "small.en", "small",
             "medium.en", "medium",
-            "large", "turbo"
+            "large", "turbo",
+            "---",  # separator
+            "distil-small.en",
+            "distil-medium.en",
+            "distil-large-v2",
+            "distil-large-v3",
         ]
         group = None
         self.model_items = {}
         
         for model_name in models:
+            if model_name == "---":
+                # Add separator
+                model_submenu.append(Gtk.SeparatorMenuItem())
+                continue
+            
             if group is None:
                 radio = Gtk.RadioMenuItem(label=model_name)
                 group = radio
