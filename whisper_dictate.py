@@ -431,6 +431,9 @@ class WhisperDictate:
         print(f"Hotkey: {hotkey}")
         print(f"Click tray icon or press hotkey to record")
         
+        # Preload model in background
+        threading.Thread(target=self.load_model, daemon=True).start()
+        
         # Initialize keybinder
         Keybinder.init()
         if Keybinder.bind(hotkey, self.on_hotkey):
