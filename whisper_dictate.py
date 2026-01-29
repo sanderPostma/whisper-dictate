@@ -2,8 +2,17 @@
 """
 Whisper Dictate - Voice-to-text with system tray integration
 Click tray icon or use hotkey to toggle recording.
+
+Usage:
+    whisper_dictate.py [--mode MODE]
+    
+Modes:
+    type      - Type directly into active window (default)
+    clipboard - Copy to clipboard only
+    both      - Type and copy to clipboard
 """
 
+import argparse
 import json
 import os
 import subprocess
@@ -26,7 +35,7 @@ DEFAULT_CONFIG = {
     "model": "base",
     "language": "en",
     "sample_rate": 16000,
-    "paste_method": "xdotool",  # xdotool or xclip
+    "output_mode": "type",  # type, clipboard, or both
 }
 
 
@@ -167,14 +176,30 @@ class WhisperDictate:
         print(f"Transcribed: {text}")
     
     def paste_text(self, text):
-        """Copy text to clipboard."""
-        # Always copy to clipboard - user can paste where they want
-        subprocess.run(
-            ["xclip", "-selection", "clipboard"],
-            input=text.encode(),
-            check=False
-        )
-        self.notify(f"📋 Copied! Ctrl+V to paste")
+        """Output text based on mode (type/clipboard/both)."""
+        mode = self.config.get("output_mode", "type")
+        
+        if mode in ("clipboard", "both"):
+            subprocess.run(
+                ["xclip", "-selection", "clipboard"],
+                input=text.encode(),
+                check=False
+            )
+        
+        if mode in ("type", "both"):
+            # Small delay to let user focus target window
+            time.sleep(0.3)
+            subprocess.run(
+                ["xdotool", "type", "--clearmodifiers", "--delay", "12", "--", text],
+                check=False
+            )
+        
+        if mode == "clipboard":
+            self.notify(f"📋 Copied! Ctrl+V to paste")
+        elif mode == "both":
+            self.notify(f"✓ Typed + copied")
+        else:
+            self.notify(f"✓ Typed")
     
     def notify(self, message):
         """Show notification."""
@@ -192,6 +217,7 @@ class WhisperDictate:
     
     def create_menu(self):
         """Create tray menu."""
+        mode = self.config.get("output_mode", "type")
         return pystray.Menu(
             pystray.MenuItem(
                 "🎤 Record/Stop",
@@ -199,6 +225,11 @@ class WhisperDictate:
                 default=True  # This makes it the default click action
             ),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                f"Mode: {mode}",
+                None,
+                enabled=False
+            ),
             pystray.MenuItem(
                 f"Model: {self.config['model']}",
                 None,
@@ -211,57 +242,12 @@ class WhisperDictate:
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Settings", self.open_settings),
-            pystray.MenuItem("Setup Hotkey", self.setup_hotkey),
             pystray.MenuItem("Quit", self.quit),
         )
     
     def open_settings(self):
         """Open config file in editor."""
         subprocess.run(["xdg-open", str(CONFIG_PATH)], check=False)
-    
-    def setup_hotkey(self):
-        """Show instructions for hotkey setup."""
-        instructions = f"""To set up global hotkey:
-
-1. Create ~/.xbindkeysrc with:
-   "{Path(__file__).parent}/toggle-recording.sh"
-     Control+Shift+d
-
-2. Run: xbindkeys
-
-3. Add 'xbindkeys' to startup apps
-
-Current config hotkey: {self.config['hotkey']}"""
-        
-        subprocess.run(
-            ["notify-send", "-t", "10000", "🎤 Hotkey Setup", instructions],
-            check=False
-        )
-        # Also create the toggle script
-        self.create_toggle_script()
-    
-    def create_toggle_script(self):
-        """Create the toggle script for xbindkeys."""
-        script_path = Path(__file__).parent / "toggle-recording.sh"
-        script_content = '''#!/bin/bash
-# Toggle Whisper Dictate recording
-# Sends signal to running instance
-
-PIDFILE="/tmp/whisper-dictate.pid"
-
-if [ -f "$PIDFILE" ]; then
-    PID=$(cat "$PIDFILE")
-    if kill -0 "$PID" 2>/dev/null; then
-        kill -USR1 "$PID"
-        exit 0
-    fi
-fi
-
-notify-send "Whisper Dictate" "Not running! Start it first."
-'''
-        script_path.write_text(script_content)
-        script_path.chmod(0o755)
-        print(f"Created {script_path}")
     
     def quit(self):
         """Quit application."""
@@ -271,28 +257,13 @@ notify-send "Whisper Dictate" "Not running! Start it first."
             pidfile.unlink()
         self.icon.stop()
     
-    def handle_signal(self, signum, frame):
-        """Handle USR1 signal to toggle recording."""
-        print(f"Received signal {signum}, toggling recording")
-        self.toggle_recording()
-    
     def run(self):
         """Run the application."""
-        import signal
-        
+        mode = self.config.get("output_mode", "type")
         print(f"Whisper Dictate starting...")
         print(f"Config: {CONFIG_PATH}")
+        print(f"Mode: {mode} | Model: {self.config['model']} | Language: {self.config['language']}")
         print(f"Click tray icon to record/stop")
-        
-        # Write PID file for signal-based toggling
-        pidfile = Path("/tmp/whisper-dictate.pid")
-        pidfile.write_text(str(os.getpid()))
-        
-        # Set up signal handler for hotkey
-        signal.signal(signal.SIGUSR1, self.handle_signal)
-        
-        # Create toggle script
-        self.create_toggle_script()
         
         # Create and run tray icon
         self.icon = pystray.Icon(
@@ -307,7 +278,39 @@ notify-send "Whisper Dictate" "Not running! Start it first."
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Whisper Dictate - Voice to text with system tray"
+    )
+    parser.add_argument(
+        "--mode", "-m",
+        choices=["type", "clipboard", "both"],
+        default=None,
+        help="Output mode: type (into active window), clipboard, or both"
+    )
+    parser.add_argument(
+        "--model",
+        choices=["tiny", "base", "small", "medium", "large"],
+        default=None,
+        help="Whisper model size"
+    )
+    parser.add_argument(
+        "--language", "-l",
+        default=None,
+        help="Language code (e.g., en, nl, de)"
+    )
+    
+    args = parser.parse_args()
+    
     app = WhisperDictate()
+    
+    # Override config with command line args
+    if args.mode:
+        app.config["output_mode"] = args.mode
+    if args.model:
+        app.config["model"] = args.model
+    if args.language:
+        app.config["language"] = args.language
+    
     app.run()
 
 
