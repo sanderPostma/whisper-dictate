@@ -167,8 +167,32 @@ class WhisperDictate:
             self.model = whisper.load_model(self.config["model"])
             print("[whisper-dictate] Model loaded")
     
+    def get_focused_window(self):
+        """Get currently focused window ID."""
+        try:
+            result = subprocess.run(
+                ["xdotool", "getactivewindow"],
+                capture_output=True, text=True, check=True
+            )
+            return result.stdout.strip()
+        except:
+            return None
+    
+    def restore_focus(self, window_id):
+        """Restore focus to a window."""
+        if window_id:
+            try:
+                subprocess.run(
+                    ["xdotool", "windowactivate", window_id],
+                    check=False, capture_output=True
+                )
+            except:
+                pass
+    
     def toggle_recording(self, *args):
         """Toggle recording on/off."""
+        # Save focused window before any UI changes
+        self.saved_window = self.get_focused_window()
         # Run in main thread via GLib
         GLib.idle_add(self._toggle_recording_impl)
     
@@ -202,6 +226,8 @@ class WhisperDictate:
         )
         self.stream.start()
         self.beep_start()
+        # Restore focus after icon change
+        GLib.timeout_add(50, lambda: self.restore_focus(getattr(self, 'saved_window', None)) or False)
     
     def stop_recording(self):
         """Stop recording and transcribe."""
@@ -217,6 +243,8 @@ class WhisperDictate:
         self.beep_stop()
         self.update_icon(False)
         self.update_status("Processing...")
+        # Restore focus after icon change
+        GLib.timeout_add(50, lambda: self.restore_focus(getattr(self, 'saved_window', None)) or False)
         
         if not self.audio_data:
             self.update_status("Ready")
