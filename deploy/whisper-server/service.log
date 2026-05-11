@@ -1,0 +1,584 @@
+
+===== Service start at 2026-04-21 19:01:27 =====
+Python: C:\sander\whisper-server\venv\pythonservice.exe
+Script: C:\sander\whisper-server\whisper_server.py
+cwd:    C:\sander\whisper-server\venv
+Config: host=0.0.0.0 port=9876 model=medium.en device=cuda cache_size=2
+[whisper-server] Loading model 'medium.en' on cuda...
+[whisper-server] Loaded 'medium.en' (backend: whisper)
+[whisper-server] Cache: ['medium.en']
+Service now RUNNING
+[whisper-server] Listening on 0.0.0.0:9876
+[whisper-server] Loading model 'distil-large-v3' on cuda...
+Loading weights:   0%|          | 0/539 [00:00<?, ?it/s]Loading weights: 100%|██████████| 539/539 [00:00<00:00, 11082.06it/s]
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 199, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 152, in _transcribe
+    self._ensure_model_locked(requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 129, in _ensure_model_locked
+    obj, backend = self._load_model(model_name)
+  File "C:\sander\whisper-server\whisper_server.py", line 107, in _load_model
+    obj = hf_pipeline(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\__init__.py", line 806, in pipeline
+    model = load_model(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\base.py", line 232, in load_model
+    model = model_class.from_pretrained(model, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\auto\auto_factory.py", line 387, in from_pretrained
+    return model_class.from_pretrained(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\modeling_utils.py", line 4143, in from_pretrained
+    model.adjust_generation_fn(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 401, in adjust_generation_fn
+    self.generation_config = GenerationConfig.from_pretrained(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\configuration_utils.py", line 943, in from_pretrained
+    resolved_config_file = cached_file(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\hub.py", line 278, in cached_file
+    file = cached_files(path_or_repo_id=path_or_repo_id, filenames=[filename], **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\hub.py", line 422, in cached_files
+    hf_hub_download(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 997, in hf_hub_download
+    return _hf_hub_download_to_cache_dir(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 1072, in _hf_hub_download_to_cache_dir
+    (url_to_download, etag, commit_hash, expected_size, xet_file_data, head_call_error) = _get_metadata_or_catch_error(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 1669, in _get_metadata_or_catch_error
+    metadata = get_hf_file_metadata(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 1591, in get_hf_file_metadata
+    response = _httpx_follow_relative_redirects_with_backoff(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_http.py", line 692, in _httpx_follow_relative_redirects_with_backoff
+    hf_raise_for_status(response)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_http.py", line 755, in hf_raise_for_status
+    _warn_on_warning_headers(response)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_http.py", line 904, in _warn_on_warning_headers
+    logger.warning(message)
+Message: 'Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'
+Arguments: ()
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 199, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 152, in _transcribe
+    self._ensure_model_locked(requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 129, in _ensure_model_locked
+    obj, backend = self._load_model(model_name)
+  File "C:\sander\whisper-server\whisper_server.py", line 107, in _load_model
+    obj = hf_pipeline(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\__init__.py", line 998, in pipeline
+    return pipeline_class(model=model, task=task, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\automatic_speech_recognition.py", line 185, in __init__
+    super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\base.py", line 914, in __init__
+    self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\automatic_speech_recognition.py", line 275, in _sanitize_parameters
+    logger.warning(type_warning)
+Message: "Using `chunk_length_s` is very experimental with seq2seq models. The results will not necessarily be entirely accurate and will have caveats. More information: https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline(..., ignore_warning=True). To use Whisper for long-form transcription, use rather the model's `generate` method directly as the model relies on it's own chunking mechanism (cf. Whisper original paper, section 3.8. Long-form Transcription)."
+Arguments: ()
+[whisper-server] Loaded 'distil-large-v3' (backend: transformers)
+[whisper-server] Cache: ['medium.en', 'distil-large-v3']
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 199, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 155, in _transcribe
+    out = self.model({
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\automatic_speech_recognition.py", line 244, in __call__
+    return super().__call__(inputs, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\base.py", line 1256, in __call__
+    return next(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\pt_utils.py", line 126, in __next__
+    item = next(self.iterator)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\pt_utils.py", line 271, in __next__
+    processed = self.infer(next(self.iterator), **self.params)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\base.py", line 1163, in forward
+    model_outputs = self._forward(model_inputs, **forward_params)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\automatic_speech_recognition.py", line 519, in _forward
+    tokens = self.model.generate(**generate_kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 855, in generate
+    ) = self.generate_with_fallback(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 1027, in generate_with_fallback
+    seek_outputs = super().generate(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 2522, in generate
+    prepared_logits_processor = self._get_logits_processor(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1195, in _get_logits_processor
+    processors = self._merge_criteria_processor_list(processors, logits_processor)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1318, in _merge_criteria_processor_list
+    logger.warning_once(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\logging.py", line 333, in warning_once
+    self.warning(*args, **kwargs)
+Message: "A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> to see related `.generate()` flags."
+Arguments: ()
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 199, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 155, in _transcribe
+    out = self.model({
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\automatic_speech_recognition.py", line 244, in __call__
+    return super().__call__(inputs, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\base.py", line 1256, in __call__
+    return next(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\pt_utils.py", line 126, in __next__
+    item = next(self.iterator)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\pt_utils.py", line 271, in __next__
+    processed = self.infer(next(self.iterator), **self.params)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\base.py", line 1163, in forward
+    model_outputs = self._forward(model_inputs, **forward_params)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\automatic_speech_recognition.py", line 519, in _forward
+    tokens = self.model.generate(**generate_kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 855, in generate
+    ) = self.generate_with_fallback(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 1027, in generate_with_fallback
+    seek_outputs = super().generate(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 2522, in generate
+    prepared_logits_processor = self._get_logits_processor(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1195, in _get_logits_processor
+    processors = self._merge_criteria_processor_list(processors, logits_processor)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1318, in _merge_criteria_processor_list
+    logger.warning_once(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\logging.py", line 333, in warning_once
+    self.warning(*args, **kwargs)
+Message: "A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> to see related `.generate()` flags."
+Arguments: ()
+[whisper-server] Cache hit: 'medium.en' (2/2 loaded)
+[whisper-server] Cache hit: 'distil-large-v3' (2/2 loaded)
+===== Service stop at 2026-04-21 19:04:19 =====
+
+===== Service start at 2026-04-21 19:04:25 =====
+Python: C:\sander\whisper-server\venv\pythonservice.exe
+Script: C:\sander\whisper-server\whisper_server.py
+cwd:    C:\sander\whisper-server\venv
+Config: host=0.0.0.0 port=9876 model=medium.en device=cuda cache_size=2
+[whisper-server] Loading model 'medium.en' on cuda...
+[whisper-server] Loaded 'medium.en' (backend: whisper)
+[whisper-server] Cache: ['medium.en']
+Service now RUNNING
+[whisper-server] Listening on 0.0.0.0:9876
+[whisper-server] Loading model 'distil-large-v3' on cuda...
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 198, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 151, in _transcribe
+    self._ensure_model_locked(requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 128, in _ensure_model_locked
+    obj, backend = self._load_model(model_name)
+  File "C:\sander\whisper-server\whisper_server.py", line 107, in _load_model
+    obj = hf_pipeline(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\__init__.py", line 660, in pipeline
+    resolved_config_file = cached_file(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\hub.py", line 278, in cached_file
+    file = cached_files(path_or_repo_id=path_or_repo_id, filenames=[filename], **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\hub.py", line 422, in cached_files
+    hf_hub_download(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 997, in hf_hub_download
+    return _hf_hub_download_to_cache_dir(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 1072, in _hf_hub_download_to_cache_dir
+    (url_to_download, etag, commit_hash, expected_size, xet_file_data, head_call_error) = _get_metadata_or_catch_error(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 1669, in _get_metadata_or_catch_error
+    metadata = get_hf_file_metadata(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 1591, in get_hf_file_metadata
+    response = _httpx_follow_relative_redirects_with_backoff(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_http.py", line 692, in _httpx_follow_relative_redirects_with_backoff
+    hf_raise_for_status(response)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_http.py", line 755, in hf_raise_for_status
+    _warn_on_warning_headers(response)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_http.py", line 904, in _warn_on_warning_headers
+    logger.warning(message)
+Message: 'Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'
+Arguments: ()
+Loading weights:   0%|          | 0/539 [00:00<?, ?it/s]Loading weights: 100%|██████████| 539/539 [00:00<00:00, 9856.73it/s]
+[whisper-server] Loaded 'distil-large-v3' (backend: transformers)
+[whisper-server] Cache: ['medium.en', 'distil-large-v3']
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 198, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 154, in _transcribe
+    out = self.model(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\automatic_speech_recognition.py", line 244, in __call__
+    return super().__call__(inputs, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\base.py", line 1256, in __call__
+    return next(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\pt_utils.py", line 126, in __next__
+    item = next(self.iterator)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\pt_utils.py", line 271, in __next__
+    processed = self.infer(next(self.iterator), **self.params)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\base.py", line 1163, in forward
+    model_outputs = self._forward(model_inputs, **forward_params)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\automatic_speech_recognition.py", line 519, in _forward
+    tokens = self.model.generate(**generate_kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 855, in generate
+    ) = self.generate_with_fallback(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 1027, in generate_with_fallback
+    seek_outputs = super().generate(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 2522, in generate
+    prepared_logits_processor = self._get_logits_processor(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1195, in _get_logits_processor
+    processors = self._merge_criteria_processor_list(processors, logits_processor)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1318, in _merge_criteria_processor_list
+    logger.warning_once(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\logging.py", line 333, in warning_once
+    self.warning(*args, **kwargs)
+Message: "A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> to see related `.generate()` flags."
+Arguments: ()
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 198, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 154, in _transcribe
+    out = self.model(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\automatic_speech_recognition.py", line 244, in __call__
+    return super().__call__(inputs, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\base.py", line 1256, in __call__
+    return next(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\pt_utils.py", line 126, in __next__
+    item = next(self.iterator)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\pt_utils.py", line 271, in __next__
+    processed = self.infer(next(self.iterator), **self.params)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\base.py", line 1163, in forward
+    model_outputs = self._forward(model_inputs, **forward_params)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\pipelines\automatic_speech_recognition.py", line 519, in _forward
+    tokens = self.model.generate(**generate_kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 855, in generate
+    ) = self.generate_with_fallback(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 1027, in generate_with_fallback
+    seek_outputs = super().generate(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 2522, in generate
+    prepared_logits_processor = self._get_logits_processor(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1195, in _get_logits_processor
+    processors = self._merge_criteria_processor_list(processors, logits_processor)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1318, in _merge_criteria_processor_list
+    logger.warning_once(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\logging.py", line 333, in warning_once
+    self.warning(*args, **kwargs)
+Message: "A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> to see related `.generate()` flags."
+Arguments: ()
+===== Service stop at 2026-04-21 19:06:26 =====
+
+===== Service start at 2026-04-21 19:06:32 =====
+Python: C:\sander\whisper-server\venv\pythonservice.exe
+Script: C:\sander\whisper-server\whisper_server.py
+cwd:    C:\sander\whisper-server\venv
+Config: host=0.0.0.0 port=9876 model=medium.en device=cuda cache_size=2
+[whisper-server] Loading model 'medium.en' on cuda...
+[whisper-server] Loaded 'medium.en' (backend: whisper)
+[whisper-server] Cache: ['medium.en']
+Service now RUNNING
+[whisper-server] Listening on 0.0.0.0:9876
+[whisper-server] Loading model 'distil-large-v3' on cuda...
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 222, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 170, in _transcribe
+    self._ensure_model_locked(requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 132, in _ensure_model_locked
+    obj, backend = self._load_model(model_name)
+  File "C:\sander\whisper-server\whisper_server.py", line 108, in _load_model
+    hf_model = AutoModelForSpeechSeq2Seq.from_pretrained(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\auto\auto_factory.py", line 329, in from_pretrained
+    config, kwargs = AutoConfig.from_pretrained(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\auto\configuration_auto.py", line 1526, in from_pretrained
+    return config_class.from_dict(config_dict, **unused_kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\configuration_utils.py", line 830, in from_dict
+    if hasattr(config, key):
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\configuration_utils.py", line 422, in __getattribute__
+    return super().__getattribute__(key)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\configuration_utils.py", line 401, in torch_dtype
+    logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\logging.py", line 333, in warning_once
+    self.warning(*args, **kwargs)
+Message: '`torch_dtype` is deprecated! Use `dtype` instead!'
+Arguments: ()
+Loading weights:   0%|          | 0/539 [00:00<?, ?it/s]Loading weights: 100%|██████████| 539/539 [00:00<00:00, 8212.27it/s]
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 222, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 170, in _transcribe
+    self._ensure_model_locked(requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 132, in _ensure_model_locked
+    obj, backend = self._load_model(model_name)
+  File "C:\sander\whisper-server\whisper_server.py", line 108, in _load_model
+    hf_model = AutoModelForSpeechSeq2Seq.from_pretrained(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\auto\auto_factory.py", line 387, in from_pretrained
+    return model_class.from_pretrained(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\modeling_utils.py", line 4143, in from_pretrained
+    model.adjust_generation_fn(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 401, in adjust_generation_fn
+    self.generation_config = GenerationConfig.from_pretrained(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\configuration_utils.py", line 943, in from_pretrained
+    resolved_config_file = cached_file(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\hub.py", line 278, in cached_file
+    file = cached_files(path_or_repo_id=path_or_repo_id, filenames=[filename], **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\hub.py", line 422, in cached_files
+    hf_hub_download(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 997, in hf_hub_download
+    return _hf_hub_download_to_cache_dir(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 1072, in _hf_hub_download_to_cache_dir
+    (url_to_download, etag, commit_hash, expected_size, xet_file_data, head_call_error) = _get_metadata_or_catch_error(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 1669, in _get_metadata_or_catch_error
+    metadata = get_hf_file_metadata(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\file_download.py", line 1591, in get_hf_file_metadata
+    response = _httpx_follow_relative_redirects_with_backoff(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_http.py", line 692, in _httpx_follow_relative_redirects_with_backoff
+    hf_raise_for_status(response)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_http.py", line 755, in hf_raise_for_status
+    _warn_on_warning_headers(response)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\huggingface_hub\utils\_http.py", line 904, in _warn_on_warning_headers
+    logger.warning(message)
+Message: 'Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.'
+Arguments: ()
+[whisper-server] Loaded 'distil-large-v3' (backend: distil)
+[whisper-server] Cache: ['medium.en', 'distil-large-v3']
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 222, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 180, in _transcribe
+    predicted_ids = self.model.generate(inputs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 855, in generate
+    ) = self.generate_with_fallback(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 1027, in generate_with_fallback
+    seek_outputs = super().generate(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 2401, in generate
+    self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1974, in _prepare_special_tokens
+    logger.warning_once(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\logging.py", line 333, in warning_once
+    self.warning(*args, **kwargs)
+Message: "The attention mask is not set and cannot be inferred from input because pad token is same as eos token. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
+Arguments: ()
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 222, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 180, in _transcribe
+    predicted_ids = self.model.generate(inputs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 855, in generate
+    ) = self.generate_with_fallback(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 1027, in generate_with_fallback
+    seek_outputs = super().generate(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 2522, in generate
+    prepared_logits_processor = self._get_logits_processor(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1195, in _get_logits_processor
+    processors = self._merge_criteria_processor_list(processors, logits_processor)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1318, in _merge_criteria_processor_list
+    logger.warning_once(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\logging.py", line 333, in warning_once
+    self.warning(*args, **kwargs)
+Message: "A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> to see related `.generate()` flags."
+Arguments: ()
+--- Logging error ---
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\logging\__init__.py", line 1113, in emit
+    stream.write(msg + self.terminator)
+    ^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'write'
+Call stack:
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1002, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 222, in handle_client
+    result = self._transcribe(audio, language, requested_model)
+  File "C:\sander\whisper-server\whisper_server.py", line 180, in _transcribe
+    predicted_ids = self.model.generate(inputs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 855, in generate
+    ) = self.generate_with_fallback(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\models\whisper\generation_whisper.py", line 1027, in generate_with_fallback
+    seek_outputs = super().generate(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\torch\utils\_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 2522, in generate
+    prepared_logits_processor = self._get_logits_processor(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1195, in _get_logits_processor
+    processors = self._merge_criteria_processor_list(processors, logits_processor)
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\generation\utils.py", line 1318, in _merge_criteria_processor_list
+    logger.warning_once(
+  File "C:\sander\whisper-server\venv\Lib\site-packages\transformers\utils\logging.py", line 333, in warning_once
+    self.warning(*args, **kwargs)
+Message: "A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> to see related `.generate()` flags."
+Arguments: ()
+[whisper-server] Loading model 'large' on cuda...
+  0%|                                              | 0.00/2.88G [00:00<?, ?iB/s]  0%|▏                                     | 9.75M/2.88G [00:00<00:30, 100MiB/s]  1%|▎                                     | 21.6M/2.88G [00:00<00:28, 109MiB/s]  1%|▍                                     | 32.9M/2.88G [00:00<00:26, 113MiB/s]  1%|▌                                     | 43.7M/2.88G [00:00<00:27, 112MiB/s]  2%|▋                                     | 54.4M/2.88G [00:00<00:29, 102MiB/s]  2%|▊                                    | 64.2M/2.88G [00:00<00:32, 92.9MiB/s]  3%|▉                                    | 74.0M/2.88G [00:00<00:31, 95.6MiB/s]  3%|█                                     | 85.6M/2.88G [00:00<00:29, 102MiB/s]  3%|█▏                                    | 96.2M/2.88G [00:00<00:28, 105MiB/s]  4%|█▎                                    | 106M/2.88G [00:01<00:30, 99.0MiB/s]  4%|█▍                                    | 116M/2.88G [00:01<00:31, 95.0MiB/s]  4%|█▌                                    | 125M/2.88G [00:01<00:31, 93.1MiB/s]  5%|█▊                                    | 136M/2.88G [00:01<00:29, 99.7MiB/s]  5%|█▉                                     | 146M/2.88G [00:01<00:29, 101MiB/s]  5%|██                                    | 156M/2.88G [00:01<00:29, 97.6MiB/s]  6%|██▏                                   | 165M/2.88G [00:01<00:30, 95.5MiB/s]  6%|██▎                                   | 174M/2.88G [00:01<00:31, 92.2MiB/s]  6%|██▍                                   | 185M/2.88G [00:01<00:29, 97.9MiB/s]  7%|██▌                                    | 197M/2.88G [00:02<00:27, 103MiB/s]  7%|██▋                                   | 207M/2.88G [00:02<00:28, 99.7MiB/s]  7%|██▊                                   | 216M/2.88G [00:02<00:29, 97.0MiB/s]  8%|██▉                                   | 226M/2.88G [00:02<00:31, 91.8MiB/s]  8%|███                                   | 235M/2.88G [00:02<00:30, 94.0MiB/s]  8%|███▏                                  | 246M/2.88G [00:02<00:28, 99.6MiB/s]  9%|███▍                                   | 257M/2.88G [00:02<00:27, 103MiB/s]  9%|███▌                                   | 269M/2.88G [00:02<00:26, 106MiB/s]  9%|███▋                                   | 279M/2.88G [00:02<00:27, 103MiB/s] 10%|███▋                                  | 289M/2.88G [00:03<00:28, 97.3MiB/s] 10%|███▊                                  | 298M/2.88G [00:03<00:29, 94.6MiB/s] 10%|███▉                                  | 307M/2.88G [00:03<00:29, 93.1MiB/s] 11%|████                                  | 318M/2.88G [00:03<00:28, 97.9MiB/s] 11%|████▎                                  | 329M/2.88G [00:03<00:26, 102MiB/s] 12%|████▌                                  | 340M/2.88G [00:03<00:25, 106MiB/s] 12%|████▋                                  | 352M/2.88G [00:03<00:24, 109MiB/s] 12%|████▊                                  | 363M/2.88G [00:03<00:24, 111MiB/s] 13%|████▉                                  | 374M/2.88G [00:03<00:23, 113MiB/s] 13%|█████                                  | 386M/2.88G [00:03<00:23, 115MiB/s] 13%|█████▎                                 | 397M/2.88G [00:04<00:23, 114MiB/s] 14%|█████▍                                 | 408M/2.88G [00:04<00:23, 114MiB/s] 14%|█████▌                                 | 419M/2.88G [00:04<00:22, 115MiB/s] 15%|█████▋                                 | 430M/2.88G [00:04<00:23, 115MiB/s] 15%|█████▊                                 | 441M/2.88G [00:04<00:22, 116MiB/s] 15%|█████▉                                 | 452M/2.88G [00:04<00:22, 116MiB/s] 16%|██████▏                                | 464M/2.88G [00:04<00:22, 117MiB/s] 16%|██████▎                                | 476M/2.88G [00:04<00:22, 117MiB/s] 17%|██████▍                                | 487M/2.88G [00:04<00:22, 117MiB/s] 17%|██████▌                                | 498M/2.88G [00:04<00:21, 117MiB/s] 17%|██████▋                                | 509M/2.88G [00:05<00:21, 118MiB/s] 18%|██████▉                                | 521M/2.88G [00:05<00:21, 118MiB/s] 18%|███████                                | 532M/2.88G [00:05<00:21, 118MiB/s] 18%|███████▏                               | 543M/2.88G [00:05<00:21, 117MiB/s] 19%|███████▎                               | 554M/2.88G [00:05<00:21, 117MiB/s] 19%|███████▌                               | 566M/2.88G [00:05<00:21, 117MiB/s] 20%|███████▋                               | 577M/2.88G [00:05<00:21, 116MiB/s] 20%|███████▊                               | 589M/2.88G [00:05<00:21, 117MiB/s] 20%|███████▉                               | 600M/2.88G [00:05<00:21, 117MiB/s] 21%|████████                               | 611M/2.88G [00:06<00:21, 115MiB/s] 21%|████████▏                              | 622M/2.88G [00:06<00:21, 116MiB/s] 22%|████████▍                              | 635M/2.88G [00:06<00:20, 116MiB/s] 22%|████████▌                              | 646M/2.88G [00:06<00:20, 117MiB/s] 22%|████████▋                              | 657M/2.88G [00:06<00:20, 117MiB/s] 23%|████████▊                              | 670M/2.88G [00:06<00:20, 117MiB/s] 23%|█████████                              | 681M/2.88G [00:06<00:20, 115MiB/s] 24%|█████████▏                             | 692M/2.88G [00:06<00:20, 115MiB/s] 24%|█████████▎                             | 704M/2.88G [00:06<00:20, 116MiB/s] 24%|█████████▍                             | 715M/2.88G [00:06<00:20, 117MiB/s] 25%|█████████▋                             | 727M/2.88G [00:07<00:19, 117MiB/s] 25%|█████████▊                             | 738M/2.88G [00:07<00:19, 118MiB/s] 25%|█████████▉                             | 750M/2.88G [00:07<00:19, 118MiB/s] 26%|██████████                             | 761M/2.88G [00:07<00:19, 117MiB/s] 26%|██████████▏                            | 772M/2.88G [00:07<00:19, 117MiB/s] 27%|██████████▍                            | 784M/2.88G [00:07<00:19, 117MiB/s] 27%|██████████▌                            | 795M/2.88G [00:07<00:19, 117MiB/s] 27%|██████████▋                            | 806M/2.88G [00:07<00:19, 117MiB/s] 28%|██████████▊                            | 817M/2.88G [00:07<00:19, 117MiB/s] 28%|██████████▉                            | 829M/2.88G [00:07<00:18, 117MiB/s] 29%|███████████▏                           | 840M/2.88G [00:08<00:18, 117MiB/s] 29%|███████████▎                           | 852M/2.88G [00:08<00:18, 117MiB/s] 29%|███████████▍                           | 863M/2.88G [00:08<00:18, 117MiB/s] 30%|███████████▌                           | 874M/2.88G [00:08<00:18, 116MiB/s] 30%|███████████▋                           | 885M/2.88G [00:08<00:18, 116MiB/s] 30%|███████████▉                           | 897M/2.88G [00:08<00:18, 116MiB/s] 31%|████████████                           | 908M/2.88G [00:08<00:18, 117MiB/s] 31%|████████████▏                          | 920M/2.88G [00:08<00:18, 117MiB/s] 32%|████████████▎                          | 932M/2.88G [00:08<00:17, 117MiB/s] 32%|████████████▍                          | 943M/2.88G [00:08<00:17, 117MiB/s] 32%|████████████▋                          | 955M/2.88G [00:09<00:17, 117MiB/s] 33%|████████████▊                          | 966M/2.88G [00:09<00:17, 117MiB/s] 33%|████████████▉                          | 977M/2.88G [00:09<00:17, 118MiB/s] 34%|█████████████                          | 989M/2.88G [00:09<00:17, 118MiB/s] 34%|████████████▉                         | 0.98G/2.88G [00:09<00:17, 118MiB/s] 34%|█████████████                         | 0.99G/2.88G [00:09<00:17, 117MiB/s] 35%|█████████████▏                        | 1.00G/2.88G [00:09<00:17, 117MiB/s] 35%|█████████████▎                        | 1.01G/2.88G [00:09<00:17, 116MiB/s] 36%|█████████████▍                        | 1.02G/2.88G [00:09<00:17, 117MiB/s] 36%|█████████████▋                        | 1.03G/2.88G [00:10<00:16, 117MiB/s] 36%|█████████████▊                        | 1.04G/2.88G [00:10<00:16, 117MiB/s] 37%|█████████████▉                        | 1.05G/2.88G [00:10<00:16, 117MiB/s] 37%|██████████████                        | 1.06G/2.88G [00:10<00:16, 117MiB/s] 37%|██████████████▏                       | 1.08G/2.88G [00:10<00:16, 116MiB/s] 38%|██████████████▎                       | 1.09G/2.88G [00:10<00:16, 116MiB/s] 38%|██████████████▌                       | 1.10G/2.88G [00:10<00:16, 117MiB/s] 39%|██████████████▋                       | 1.11G/2.88G [00:10<00:16, 117MiB/s] 39%|██████████████▊                       | 1.12G/2.88G [00:10<00:16, 117MiB/s] 39%|██████████████▉                       | 1.13G/2.88G [00:10<00:15, 118MiB/s] 40%|███████████████                       | 1.14G/2.88G [00:11<00:15, 117MiB/s] 40%|███████████████▎                      | 1.15G/2.88G [00:11<00:15, 117MiB/s] 41%|███████████████▍                      | 1.17G/2.88G [00:11<00:15, 118MiB/s] 41%|███████████████▌                      | 1.18G/2.88G [00:11<00:15, 118MiB/s] 41%|███████████████▎                     | 1.19G/2.88G [00:11<00:24, 74.2MiB/s] 42%|███████████████▍                     | 1.20G/2.88G [00:11<00:22, 81.2MiB/s] 42%|███████████████▌                     | 1.21G/2.88G [00:11<00:19, 90.2MiB/s] 42%|███████████████▋                     | 1.22G/2.88G [00:11<00:18, 97.0MiB/s] 43%|████████████████▎                     | 1.23G/2.88G [00:12<00:17, 102MiB/s] 43%|████████████████▍                     | 1.24G/2.88G [00:12<00:16, 106MiB/s] 44%|████████████████▌                     | 1.25G/2.88G [00:12<00:15, 109MiB/s] 44%|████████████████▋                     | 1.27G/2.88G [00:12<00:15, 112MiB/s] 44%|████████████████▊                     | 1.28G/2.88G [00:12<00:15, 113MiB/s] 45%|█████████████████                     | 1.29G/2.88G [00:12<00:14, 114MiB/s] 45%|█████████████████▏                    | 1.30G/2.88G [00:12<00:14, 115MiB/s] 46%|█████████████████▎                    | 1.31G/2.88G [00:12<00:14, 116MiB/s] 46%|█████████████████▍                    | 1.32G/2.88G [00:12<00:14, 116MiB/s] 46%|█████████████████▌                    | 1.33G/2.88G [00:12<00:14, 116MiB/s] 47%|█████████████████▋                    | 1.34G/2.88G [00:13<00:14, 116MiB/s] 47%|█████████████████▉                    | 1.35G/2.88G [00:13<00:14, 116MiB/s] 47%|██████████████████                    | 1.36G/2.88G [00:13<00:13, 116MiB/s] 48%|██████████████████▏                   | 1.38G/2.88G [00:13<00:13, 117MiB/s] 48%|██████████████████▎                   | 1.39G/2.88G [00:13<00:13, 116MiB/s] 49%|██████████████████▍                   | 1.40G/2.88G [00:13<00:13, 116MiB/s] 49%|██████████████████▌                   | 1.41G/2.88G [00:13<00:13, 117MiB/s] 49%|██████████████████▊                   | 1.42G/2.88G [00:13<00:13, 117MiB/s] 50%|██████████████████▉                   | 1.43G/2.88G [00:13<00:13, 117MiB/s] 50%|███████████████████                   | 1.44G/2.88G [00:13<00:13, 117MiB/s] 50%|███████████████████▏                  | 1.45G/2.88G [00:14<00:13, 117MiB/s] 51%|███████████████████▎                  | 1.46G/2.88G [00:14<00:12, 117MiB/s] 51%|███████████████████▍                  | 1.48G/2.88G [00:14<00:12, 117MiB/s] 52%|███████████████████▋                  | 1.49G/2.88G [00:14<00:12, 118MiB/s] 52%|███████████████████▊                  | 1.50G/2.88G [00:14<00:12, 118MiB/s] 52%|███████████████████▉                  | 1.51G/2.88G [00:14<00:12, 118MiB/s] 53%|████████████████████                  | 1.52G/2.88G [00:14<00:12, 117MiB/s] 53%|████████████████████▏                 | 1.53G/2.88G [00:14<00:12, 116MiB/s] 54%|████████████████████▎                 | 1.54G/2.88G [00:14<00:12, 117MiB/s] 54%|████████████████████▌                 | 1.55G/2.88G [00:14<00:12, 116MiB/s] 54%|████████████████████▋                 | 1.56G/2.88G [00:15<00:12, 117MiB/s] 55%|████████████████████▊                 | 1.57G/2.88G [00:15<00:12, 116MiB/s] 55%|████████████████████▉                 | 1.59G/2.88G [00:15<00:11, 116MiB/s] 56%|█████████████████████                 | 1.60G/2.88G [00:15<00:11, 117MiB/s] 56%|█████████████████████▎                | 1.61G/2.88G [00:15<00:11, 117MiB/s] 56%|█████████████████████▍                | 1.62G/2.88G [00:15<00:12, 107MiB/s] 57%|█████████████████████▌                | 1.63G/2.88G [00:15<00:12, 109MiB/s] 57%|█████████████████████▋                | 1.64G/2.88G [00:15<00:11, 111MiB/s] 57%|█████████████████████▊                | 1.65G/2.88G [00:15<00:11, 113MiB/s] 58%|█████████████████████▉                | 1.66G/2.88G [00:16<00:11, 114MiB/s] 58%|██████████████████████▏               | 1.68G/2.88G [00:16<00:11, 115MiB/s] 59%|██████████████████████▎               | 1.69G/2.88G [00:16<00:11, 116MiB/s] 59%|██████████████████████▍               | 1.70G/2.88G [00:16<00:10, 117MiB/s] 59%|██████████████████████▌               | 1.71G/2.88G [00:16<00:10, 117MiB/s] 60%|██████████████████████▋               | 1.72G/2.88G [00:16<00:10, 117MiB/s] 60%|██████████████████████▊               | 1.73G/2.88G [00:16<00:10, 117MiB/s] 61%|███████████████████████               | 1.74G/2.88G [00:16<00:10, 117MiB/s] 61%|███████████████████████▏              | 1.75G/2.88G [00:16<00:10, 117MiB/s] 61%|███████████████████████▎              | 1.77G/2.88G [00:16<00:10, 118MiB/s] 62%|███████████████████████▍              | 1.78G/2.88G [00:17<00:10, 117MiB/s] 62%|███████████████████████▋              | 1.79G/2.88G [00:17<00:09, 117MiB/s] 63%|███████████████████████▊              | 1.80G/2.88G [00:17<00:09, 117MiB/s] 63%|███████████████████████▉              | 1.81G/2.88G [00:17<00:09, 117MiB/s] 63%|████████████████████████              | 1.82G/2.88G [00:17<00:09, 117MiB/s] 64%|████████████████████████▏             | 1.83G/2.88G [00:17<00:09, 116MiB/s] 64%|████████████████████████▎             | 1.84G/2.88G [00:17<00:09, 117MiB/s] 64%|████████████████████████▍             | 1.85G/2.88G [00:17<00:09, 117MiB/s] 65%|████████████████████████▋             | 1.86G/2.88G [00:17<00:09, 117MiB/s] 65%|████████████████████████▊             | 1.88G/2.88G [00:17<00:09, 116MiB/s] 66%|████████████████████████▉             | 1.89G/2.88G [00:18<00:09, 116MiB/s] 66%|█████████████████████████             | 1.90G/2.88G [00:18<00:09, 116MiB/s] 66%|█████████████████████████▏            | 1.91G/2.88G [00:18<00:08, 116MiB/s] 67%|█████████████████████████▎            | 1.92G/2.88G [00:18<00:08, 116MiB/s] 67%|█████████████████████████▌            | 1.93G/2.88G [00:18<00:08, 116MiB/s] 67%|█████████████████████████▋            | 1.94G/2.88G [00:18<00:08, 117MiB/s] 68%|█████████████████████████▊            | 1.95G/2.88G [00:18<00:08, 117MiB/s] 68%|█████████████████████████▉            | 1.96G/2.88G [00:18<00:08, 118MiB/s] 69%|██████████████████████████            | 1.98G/2.88G [00:18<00:08, 118MiB/s] 69%|██████████████████████████▎           | 1.99G/2.88G [00:19<00:08, 117MiB/s] 69%|██████████████████████████▍           | 2.00G/2.88G [00:19<00:08, 117MiB/s] 70%|██████████████████████████▌           | 2.01G/2.88G [00:19<00:07, 117MiB/s] 70%|██████████████████████████▋           | 2.02G/2.88G [00:19<00:07, 117MiB/s] 71%|██████████████████████████▊           | 2.03G/2.88G [00:19<00:07, 117MiB/s] 71%|██████████████████████████▉           | 2.04G/2.88G [00:19<00:07, 116MiB/s] 71%|███████████████████████████           | 2.05G/2.88G [00:19<00:07, 116MiB/s] 72%|███████████████████████████▎          | 2.06G/2.88G [00:19<00:07, 117MiB/s] 72%|███████████████████████████▍          | 2.07G/2.88G [00:19<00:07, 116MiB/s] 73%|███████████████████████████▌          | 2.09G/2.88G [00:19<00:07, 117MiB/s] 73%|███████████████████████████▋          | 2.10G/2.88G [00:20<00:07, 116MiB/s] 73%|███████████████████████████▊          | 2.11G/2.88G [00:20<00:07, 117MiB/s] 74%|███████████████████████████▉          | 2.12G/2.88G [00:20<00:06, 117MiB/s] 74%|████████████████████████████▏         | 2.13G/2.88G [00:20<00:06, 117MiB/s] 74%|████████████████████████████▎         | 2.14G/2.88G [00:20<00:06, 117MiB/s] 75%|████████████████████████████▍         | 2.15G/2.88G [00:20<00:06, 118MiB/s] 75%|████████████████████████████▌         | 2.16G/2.88G [00:20<00:06, 118MiB/s] 76%|████████████████████████████▋         | 2.17G/2.88G [00:20<00:06, 118MiB/s] 76%|████████████████████████████▉         | 2.19G/2.88G [00:20<00:06, 118MiB/s] 76%|█████████████████████████████         | 2.20G/2.88G [00:20<00:06, 116MiB/s] 77%|█████████████████████████████▏        | 2.21G/2.88G [00:21<00:06, 115MiB/s] 77%|█████████████████████████████▎        | 2.22G/2.88G [00:21<00:06, 116MiB/s] 78%|█████████████████████████████▍        | 2.23G/2.88G [00:21<00:05, 116MiB/s] 78%|█████████████████████████████▌        | 2.24G/2.88G [00:21<00:05, 117MiB/s] 78%|█████████████████████████████▊        | 2.25G/2.88G [00:21<00:05, 113MiB/s] 79%|█████████████████████████████▉        | 2.26G/2.88G [00:21<00:05, 115MiB/s] 79%|██████████████████████████████        | 2.27G/2.88G [00:21<00:05, 115MiB/s] 79%|██████████████████████████████▏       | 2.28G/2.88G [00:21<00:05, 116MiB/s] 80%|██████████████████████████████▎       | 2.29G/2.88G [00:21<00:05, 116MiB/s] 80%|██████████████████████████████▍       | 2.31G/2.88G [00:21<00:05, 116MiB/s] 81%|██████████████████████████████▋       | 2.32G/2.88G [00:22<00:05, 116MiB/s] 81%|██████████████████████████████▊       | 2.33G/2.88G [00:22<00:05, 117MiB/s] 81%|██████████████████████████████▉       | 2.34G/2.88G [00:22<00:04, 117MiB/s] 82%|███████████████████████████████       | 2.35G/2.88G [00:22<00:04, 117MiB/s] 82%|███████████████████████████████▏      | 2.36G/2.88G [00:22<00:04, 116MiB/s] 83%|███████████████████████████████▎      | 2.37G/2.88G [00:22<00:04, 117MiB/s] 83%|███████████████████████████████▌      | 2.38G/2.88G [00:22<00:04, 117MiB/s] 83%|███████████████████████████████▋      | 2.40G/2.88G [00:22<00:04, 118MiB/s] 84%|███████████████████████████████▊      | 2.41G/2.88G [00:22<00:04, 117MiB/s] 84%|███████████████████████████████▉      | 2.42G/2.88G [00:22<00:04, 117MiB/s] 84%|████████████████████████████████      | 2.43G/2.88G [00:23<00:04, 117MiB/s] 85%|████████████████████████████████▏     | 2.44G/2.88G [00:23<00:04, 117MiB/s] 85%|████████████████████████████████▍     | 2.45G/2.88G [00:23<00:03, 117MiB/s] 86%|████████████████████████████████▌     | 2.46G/2.88G [00:23<00:03, 117MiB/s] 86%|████████████████████████████████▋     | 2.47G/2.88G [00:23<00:03, 117MiB/s] 86%|████████████████████████████████▊     | 2.48G/2.88G [00:23<00:03, 116MiB/s] 87%|████████████████████████████████▉     | 2.49G/2.88G [00:23<00:03, 116MiB/s] 87%|█████████████████████████████████     | 2.50G/2.88G [00:23<00:03, 116MiB/s] 87%|█████████████████████████████████▏    | 2.52G/2.88G [00:23<00:03, 116MiB/s] 88%|█████████████████████████████████▍    | 2.53G/2.88G [00:24<00:03, 113MiB/s] 88%|█████████████████████████████████▌    | 2.54G/2.88G [00:24<00:03, 114MiB/s] 89%|█████████████████████████████████▋    | 2.55G/2.88G [00:24<00:03, 115MiB/s] 89%|████████████████████████████████▉    | 2.56G/2.88G [00:24<00:04, 81.5MiB/s] 89%|█████████████████████████████████    | 2.57G/2.88G [00:24<00:03, 88.3MiB/s] 90%|█████████████████████████████████▏   | 2.58G/2.88G [00:24<00:03, 94.9MiB/s] 90%|██████████████████████████████████▎   | 2.59G/2.88G [00:24<00:03, 101MiB/s] 91%|██████████████████████████████████▍   | 2.60G/2.88G [00:24<00:02, 105MiB/s] 91%|██████████████████████████████████▌   | 2.61G/2.88G [00:24<00:02, 104MiB/s] 91%|█████████████████████████████████▊   | 2.62G/2.88G [00:25<00:02, 98.6MiB/s] 92%|██████████████████████████████████▊   | 2.63G/2.88G [00:25<00:02, 103MiB/s] 92%|██████████████████████████████████▉   | 2.64G/2.88G [00:25<00:02, 107MiB/s] 92%|███████████████████████████████████   | 2.66G/2.88G [00:25<00:02, 110MiB/s] 93%|███████████████████████████████████▏  | 2.67G/2.88G [00:25<00:01, 113MiB/s] 93%|███████████████████████████████████▍  | 2.68G/2.88G [00:25<00:01, 114MiB/s] 94%|███████████████████████████████████▌  | 2.69G/2.88G [00:25<00:01, 115MiB/s] 94%|███████████████████████████████████▋  | 2.70G/2.88G [00:25<00:01, 115MiB/s] 94%|███████████████████████████████████▊  | 2.71G/2.88G [00:25<00:01, 116MiB/s] 95%|███████████████████████████████████▉  | 2.72G/2.88G [00:25<00:01, 117MiB/s] 95%|████████████████████████████████████▏ | 2.73G/2.88G [00:26<00:01, 117MiB/s] 95%|████████████████████████████████████▎ | 2.75G/2.88G [00:26<00:01, 117MiB/s] 96%|████████████████████████████████████▍ | 2.76G/2.88G [00:26<00:01, 117MiB/s] 96%|████████████████████████████████████▌ | 2.77G/2.88G [00:26<00:00, 117MiB/s] 97%|████████████████████████████████████▋ | 2.78G/2.88G [00:26<00:00, 118MiB/s] 97%|████████████████████████████████████▊ | 2.79G/2.88G [00:26<00:00, 117MiB/s] 97%|█████████████████████████████████████ | 2.80G/2.88G [00:26<00:00, 117MiB/s] 98%|█████████████████████████████████████▏| 2.81G/2.88G [00:26<00:00, 118MiB/s] 98%|█████████████████████████████████████▎| 2.82G/2.88G [00:26<00:00, 118MiB/s] 99%|█████████████████████████████████████▍| 2.84G/2.88G [00:27<00:00, 116MiB/s] 99%|█████████████████████████████████████▋| 2.85G/2.88G [00:27<00:00, 117MiB/s] 99%|█████████████████████████████████████▊| 2.86G/2.88G [00:27<00:00, 116MiB/s]100%|█████████████████████████████████████▉| 2.87G/2.88G [00:27<00:00, 117MiB/s]100%|██████████████████████████████████████| 2.88G/2.88G [00:27<00:00, 113MiB/s]
+[whisper-server] Error for ('192.168.1.200', 34810): CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 6.00 GiB of which 0 bytes is free. Of the allocated memory 11.85 GiB is allocated by PyTorch, and 484.18 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[whisper-server] Loading model 'large' on cuda...
+[whisper-server] Error for ('192.168.1.200', 38328): [Errno 22] Invalid argument
+[whisper-server] Loading model 'large' on cuda...
+Exception in thread Thread-21 (handle_client):
+Traceback (most recent call last):
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\natty\AppData\Local\Python\pythoncore-3.11-64\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\sander\whisper-server\whisper_server.py", line 231, in handle_client
+    except Exception as e:
+    ^^^^^^^^^^^^^^^^^^^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+[whisper-server] Error for ('192.168.1.200', 38558): CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 6.00 GiB of which 0 bytes is free. Of the allocated memory 11.84 GiB is allocated by PyTorch, and 491.28 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[whisper-server] Loading model 'large' on cuda...
+[whisper-server] Error for ('192.168.1.200', 41388): CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 6.00 GiB of which 0 bytes is free. Of the allocated memory 11.84 GiB is allocated by PyTorch, and 491.28 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[whisper-server] Loading model 'large' on cuda...
+[whisper-server] Error for ('192.168.1.200', 44328): CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 6.00 GiB of which 0 bytes is free. Of the allocated memory 11.84 GiB is allocated by PyTorch, and 491.28 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[whisper-server] Loading model 'large' on cuda...
+[whisper-server] Error for ('192.168.1.200', 33850): CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 6.00 GiB of which 0 bytes is free. Of the allocated memory 11.84 GiB is allocated by PyTorch, and 491.28 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[whisper-server] Loading model 'large' on cuda...
+
+===== Service start at 2026-04-24 09:48:20 =====
+Python: C:\sander\whisper-server\venv\pythonservice.exe
+Script: C:\sander\whisper-server\whisper_server.py
+cwd:    C:\sander\whisper-server\venv
+Config: host=0.0.0.0 port=9876 model=medium.en device=cuda cache_size=2
+[whisper-server] Loading model 'medium.en' on cuda...
+[whisper-server] Loaded 'medium.en' (backend: whisper)
+[whisper-server] Cache: ['medium.en']
+Service now RUNNING
+[whisper-server] Listening on 0.0.0.0:9876
