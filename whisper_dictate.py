@@ -87,6 +87,7 @@ class WhisperDictate:
         self.stream = None
         self.indicator = None
         self.status_item = None
+        self.remote_item = None
         self.remote_available = None
         self.remote_state_lock = threading.Lock()
         self.remote_monitor_stop = threading.Event()
@@ -434,6 +435,28 @@ class WhisperDictate:
             if reason:
                 msg += f": {reason}"
             print(msg)
+        GLib.idle_add(self.update_remote_menu_label)
+
+    def get_remote_menu_label(self):
+        """Return remote menu label with reachability indicator."""
+        if not self.get_remote_config().get("enabled", False):
+            icon = "⚪"
+        else:
+            with self.remote_state_lock:
+                available = self.remote_available
+            if available is True:
+                icon = "🟢"
+            elif available is False:
+                icon = "🔴"
+            else:
+                icon = "⚪"
+        return f"{icon} Remote Server"
+
+    def update_remote_menu_label(self):
+        """Refresh remote menu item label from current reachability state."""
+        if self.remote_item:
+            self.remote_item.set_label(self.get_remote_menu_label())
+        return False
 
     def probe_remote_service(self, timeout=3):
         """Lightweight remote health check using protocol ping."""
@@ -1181,10 +1204,11 @@ class WhisperDictate:
         # Remote server toggle
         remote_config = self.get_remote_config()
         remote_enabled = remote_config.get("enabled", False)
-        remote_item = Gtk.CheckMenuItem(label="Remote Server")
+        remote_item = Gtk.CheckMenuItem(label=self.get_remote_menu_label())
         remote_item.set_active(remote_enabled)
         remote_item.connect("toggled", self.on_remote_toggled)
         menu.append(remote_item)
+        self.remote_item = remote_item
         
         # Transcribe file
         transcribe_file_item = Gtk.MenuItem(label="Transcribe File...")
@@ -1269,12 +1293,16 @@ class WhisperDictate:
         self.save_config(self.config)
         print(f"[whisper-dictate] Remote server enabled: {remote_config['enabled']}")
         if remote_config["enabled"]:
+            with self.remote_state_lock:
+                self.remote_available = None
+            self.update_remote_menu_label()
             self.start_remote_monitor()
             threading.Thread(target=self.check_remote_service_once, daemon=True).start()
         else:
             self.stop_remote_monitor()
             with self.remote_state_lock:
                 self.remote_available = None
+            self.update_remote_menu_label()
 
     def show_audio_settings(self, *args):
         """Show dialog for calibrating noise gate with live mic level."""
