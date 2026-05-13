@@ -87,12 +87,21 @@ class WhisperDictate:
         self.stream = None
         self.indicator = None
         self.status_item = None
+        self.model_menu_item = None
+        self.lang_menu_item = None
         self.remote_item = None
         self.remote_available = None
         self.remote_state_lock = threading.Lock()
         self.remote_monitor_stop = threading.Event()
         self.remote_monitor_thread = None
         self.create_icons()
+        model_changes = self.normalize_models_for_language()
+        if model_changes:
+            self.save_config(self.config)
+            print(
+                "[whisper-dictate] Adjusted non-English model config: "
+                + ", ".join(model_changes)
+            )
 
     def merge_config(self, loaded_config):
         """Merge loaded config with defaults, including nested dicts."""
@@ -135,6 +144,58 @@ class WhisperDictate:
         if isinstance(remote_config, dict):
             remote_defaults.update(remote_config)
         return remote_defaults
+
+    def is_english_only_model(self, model_name):
+        """Return True for model names that should only be used for English."""
+        return bool(model_name) and (
+            model_name.endswith(".en") or self.is_distil_model(model_name)
+        )
+
+    def get_multilingual_model(self, model_name):
+        """Return a multilingual equivalent for an English-only model."""
+        if not model_name:
+            return model_name
+        if model_name.endswith(".en"):
+            return model_name[: -len(".en")]
+        if self.is_distil_model(model_name):
+            return "large"
+        return model_name
+
+    def normalize_models_for_language(self):
+        """Keep configured models compatible with the selected language."""
+        if self.config.get("language", "en") == "en":
+            return []
+
+        changes = []
+        model = self.config.get("model", "base")
+        normalized_model = self.get_multilingual_model(model)
+        if normalized_model != model:
+            self.config["model"] = normalized_model
+            changes.append(f"model {model} -> {normalized_model}")
+
+        fallback = self.config.get("cpu_fallback_model", "base.en")
+        normalized_fallback = self.get_multilingual_model(fallback)
+        if normalized_fallback != fallback:
+            self.config["cpu_fallback_model"] = normalized_fallback
+            changes.append(f"fallback {fallback} -> {normalized_fallback}")
+
+        remote_config = self.get_remote_config()
+        remote_model = remote_config.get("model")
+        normalized_remote_model = self.get_multilingual_model(remote_model)
+        if normalized_remote_model != remote_model:
+            remote_config["model"] = normalized_remote_model
+            self.config["remote_server"] = remote_config
+            changes.append(f"remote {remote_model} -> {normalized_remote_model}")
+
+        return changes
+
+    def get_remote_model(self):
+        """Return the effective remote model for the selected language."""
+        remote_config = self.get_remote_config()
+        model = remote_config.get("model", self.config.get("model", "base"))
+        if self.config.get("language", "en") != "en":
+            return self.get_multilingual_model(model)
+        return model
 
     def get_cpu_fallback_model(self):
         """Get local fallback model used when remote is down.
@@ -466,7 +527,7 @@ class WhisperDictate:
         header = {
             "ping": True,
             "language": self.config.get("language", "en"),
-            "model": self.config.get("model", "base"),
+            "model": self.get_remote_model(),
             "sample_rate": self.config.get("sample_rate", 16000),
             "audio_size": 0,
         }
@@ -529,7 +590,7 @@ class WhisperDictate:
         audio_bytes = audio.astype(np.float32).tobytes()
         header = {
             "language": self.config.get("language", "en"),
-            "model": remote_config.get("model", self.config.get("model", "base")),
+            "model": self.get_remote_model(),
             "sample_rate": self.config.get("sample_rate", 16000),
             "audio_size": len(audio_bytes),
         }
@@ -1260,12 +1321,21 @@ class WhisperDictate:
         """Handle model selection change."""
         if item.get_active():
             old_model = self.config.get("model", "base")
+            selected_model = model_name
+            if self.config.get("language", "en") != "en":
+                selected_model = self.get_multilingual_model(model_name)
             if model_name != old_model:
-                self.config["model"] = model_name
+                self.config["model"] = selected_model
+                self.normalize_models_for_language()
                 self.save_config(self.config)
                 self.model = None  # Force reload
-                self.model_menu_item.set_label(f"Model: {model_name}")
-                print(f"[whisper-dictate] Model changed to: {model_name}")
+                self.model_menu_item.set_label(f"Model: {self.config['model']}")
+                print(f"[whisper-dictate] Model changed to: {self.config['model']}")
+                if selected_model != model_name:
+                    self.notify(
+                        f"{model_name} is English-only; using {selected_model} for "
+                        f"{self.config.get('language')}."
+                    )
                 # Preload new model in background
                 threading.Thread(target=self.load_model, daemon=True).start()
 
@@ -1276,14 +1346,16 @@ class WhisperDictate:
         if lang_code == self.config.get("language"):
             return
         self.config["language"] = lang_code
+        model_changes = self.normalize_models_for_language()
         self.save_config(self.config)
         self.lang_menu_item.set_label(f"Language: {lang_code}")
+        if self.model_menu_item:
+            self.model_menu_item.set_label(f"Model: {self.config['model']}")
         print(f"[whisper-dictate] Language changed to: {lang_code}")
-        if lang_code != "en" and self.is_distil_model():
-            self.notify(
-                "Distil models are English-only. Pick a multilingual model "
-                "(large-v3 / medium / turbo) for Dutch."
-            )
+        if model_changes:
+            msg = "Adjusted non-English model config: " + ", ".join(model_changes)
+            print(f"[whisper-dictate] {msg}")
+            self.notify(msg)
 
     def on_remote_toggled(self, item):
         """Enable or disable remote transcription."""
@@ -1566,7 +1638,7 @@ class WhisperDictate:
         print(f"Mode: {mode} | Model: {self.config['model']} | Language: {self.config['language']}")
         print(
             f"Remote: {remote_cfg.get('enabled')} | {remote_cfg.get('host')}:{remote_cfg.get('port')} "
-            f"| Remote model: {remote_cfg.get('model')} | Local fallback: {self.get_cpu_fallback_model()}"
+            f"| Remote model: {self.get_remote_model()} | Local fallback: {self.get_cpu_fallback_model()}"
         )
         print(f"Hotkey: {hotkey}")
         print(f"Click tray icon or press hotkey to record")
