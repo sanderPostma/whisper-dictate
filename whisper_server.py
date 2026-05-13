@@ -41,7 +41,7 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 9876
 DEFAULT_MODEL = "distil-large-v3"
 DEFAULT_DEVICE = "cuda"
-DEFAULT_CACHE_SIZE = 2
+DEFAULT_CACHE_SIZE = 1
 
 HAS_WIN_SERVICE = False
 if sys.platform == "win32":
@@ -97,6 +97,20 @@ class WhisperTCPServer:
         if HAS_TORCH and self.device == "cuda" and torch.cuda.is_available():
             torch.cuda.empty_cache()
 
+    def _evict_all_models(self, reason):
+        """Unload cached models before loading another CUDA model."""
+        if not self.model_cache:
+            self.model_name = None
+            self._free_vram()
+            return
+        print(f"[whisper-server] Evicting all cached models: {reason}")
+        while self.model_cache:
+            evicted, entry = self.model_cache.popitem(last=False)
+            print(f"[whisper-server] Evicting '{evicted}'")
+            del entry
+        self.model_name = None
+        self._free_vram()
+
     def _load_model(self, model_name):
         print(f"[whisper-server] Loading model '{model_name}' on {self.device}...")
         if self._is_distil(model_name):
@@ -132,11 +146,16 @@ class WhisperTCPServer:
                   f"({len(self.model_cache)}/{self.cache_size} loaded)")
             return
 
-        # Evict LRU entries BEFORE loading so we don't briefly hold old+new in VRAM.
-        while len(self.model_cache) >= self.cache_size:
-            evicted, _ = self.model_cache.popitem(last=False)
-            print(f"[whisper-server] Evicting '{evicted}' from cache")
-        self._free_vram()
+        if self.device == "cuda":
+            # Whisper models can be large enough that a second resident model
+            # briefly OOMs during load. Prefer a reliable switch over caching.
+            self._evict_all_models(f"loading '{model_name}'")
+        else:
+            while len(self.model_cache) >= self.cache_size:
+                evicted, entry = self.model_cache.popitem(last=False)
+                print(f"[whisper-server] Evicting '{evicted}' from cache")
+                del entry
+            self._free_vram()
 
         try:
             obj, backend = self._load_model(model_name)
@@ -148,10 +167,7 @@ class WhisperTCPServer:
             if not is_oom or not self.model_cache:
                 raise
             print(f"[whisper-server] Load failed with OOM; evicting all cached models and retrying")
-            while self.model_cache:
-                evicted, _ = self.model_cache.popitem(last=False)
-                print(f"[whisper-server] OOM recovery: evicting '{evicted}'")
-            self._free_vram()
+            self._evict_all_models("OOM recovery")
             obj, backend = self._load_model(model_name)
 
         self.model_cache[model_name] = (obj, backend)

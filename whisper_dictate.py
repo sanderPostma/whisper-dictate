@@ -663,13 +663,10 @@ class WhisperDictate:
                         self.set_remote_available(True)
                     except Exception as e:
                         self.set_remote_available(False, str(e))
-                        # The CPU fallback model is usually tiny (base/base.en) and
-                        # produces near-gibberish for non-English audio. Refuse to
-                        # fall back silently in that case; notify the user instead.
-                        if self.config.get("language", "en") != "en":
+                        if self.is_english_only_model(local_fallback_model):
                             err = str(e)[:200]
                             GLib.idle_add(lambda err=err: (
-                                self.notify(f"Remote failed; skipping local fallback for non-English audio.\n{err}"),
+                                self.notify(f"Remote failed; fallback model is English-only.\n{err}"),
                                 self.update_status("Remote failed"),
                             ) and False)
                             return
