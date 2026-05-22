@@ -62,6 +62,7 @@ DEFAULT_CONFIG = {
     "model": "base",
     "cpu_fallback_model": "base.en",
     "language": "en",
+    "language_models": {},
     "sample_rate": 16000,
     "silence_threshold": 0.01,
     "silence_gate_delay_ms": 500,
@@ -96,8 +97,10 @@ class WhisperDictate:
         self.remote_monitor_thread = None
         self.create_icons()
         model_changes = self.normalize_models_for_language()
-        if model_changes:
+        preferences_changed = self.remember_model_for_language()
+        if model_changes or preferences_changed:
             self.save_config(self.config)
+        if model_changes:
             print(
                 "[whisper-dictate] Adjusted non-English model config: "
                 + ", ".join(model_changes)
@@ -161,6 +164,58 @@ class WhisperDictate:
             return "large"
         return model_name
 
+    def get_language_model_preferences(self):
+        """Return persisted per-language model preferences."""
+        preferences = self.config.get("language_models")
+        if not isinstance(preferences, dict):
+            preferences = {}
+            self.config["language_models"] = preferences
+        return preferences
+
+    def get_language_model_preference(self, lang_code):
+        """Return the remembered model for lang_code, if one exists."""
+        model_name = self.get_language_model_preferences().get(lang_code)
+        return model_name if isinstance(model_name, str) and model_name else None
+
+    def remember_model_for_language(self, lang_code=None, model_name=None):
+        """Remember the effective model for a language."""
+        if lang_code is None:
+            lang_code = self.config.get("language", "en")
+        if model_name is None:
+            model_name = self.config.get("model", "base")
+        if not lang_code or not model_name:
+            return False
+
+        if lang_code != "en":
+            model_name = self.get_multilingual_model(model_name)
+
+        preferences = self.get_language_model_preferences()
+        if preferences.get(lang_code) == model_name:
+            return False
+        preferences[lang_code] = model_name
+        return True
+
+    def get_model_for_language(self, lang_code, fallback_model=None):
+        """Return the remembered model for lang_code or a compatible fallback."""
+        model_name = self.get_language_model_preference(lang_code)
+        if not model_name:
+            model_name = fallback_model or self.config.get("model", "base")
+        if lang_code != "en":
+            model_name = self.get_multilingual_model(model_name)
+        return model_name
+
+    def update_model_menu_state(self):
+        """Keep the model menu label and radio state aligned with config."""
+        current_model = self.config.get("model", "base")
+        if self.model_menu_item:
+            self.model_menu_item.set_label(f"Model: {current_model}")
+
+        model_items = getattr(self, "model_items", None)
+        if model_items and current_model in model_items:
+            item = model_items[current_model]
+            if not item.get_active():
+                item.set_active(True)
+
     def normalize_models_for_language(self):
         """Keep configured models compatible with the selected language."""
         if self.config.get("language", "en") == "en":
@@ -171,6 +226,7 @@ class WhisperDictate:
         normalized_model = self.get_multilingual_model(model)
         if normalized_model != model:
             self.config["model"] = normalized_model
+            self.remember_model_for_language(model_name=normalized_model)
             changes.append(f"model {model} -> {normalized_model}")
 
         fallback = self.config.get("cpu_fallback_model", "base.en")
@@ -1317,16 +1373,18 @@ class WhisperDictate:
     def on_model_changed(self, item, model_name):
         """Handle model selection change."""
         if item.get_active():
+            language = self.config.get("language", "en")
             old_model = self.config.get("model", "base")
             selected_model = model_name
-            if self.config.get("language", "en") != "en":
+            if language != "en":
                 selected_model = self.get_multilingual_model(model_name)
-            if model_name != old_model:
+            preferences_changed = self.remember_model_for_language(language, selected_model)
+            if selected_model != old_model or preferences_changed or selected_model != model_name:
                 self.config["model"] = selected_model
                 self.normalize_models_for_language()
                 self.save_config(self.config)
                 self.model = None  # Force reload
-                self.model_menu_item.set_label(f"Model: {self.config['model']}")
+                self.update_model_menu_state()
                 print(f"[whisper-dictate] Model changed to: {self.config['model']}")
                 if selected_model != model_name:
                     self.notify(
@@ -1340,15 +1398,24 @@ class WhisperDictate:
         """Handle language selection change."""
         if not item.get_active():
             return
-        if lang_code == self.config.get("language"):
+        old_lang = self.config.get("language", "en")
+        if lang_code == old_lang:
             return
+        self.remember_model_for_language(old_lang)
+        old_model = self.config.get("model", "base")
         self.config["language"] = lang_code
+        self.config["model"] = self.get_model_for_language(
+            lang_code, fallback_model=old_model
+        )
+        self.remember_model_for_language(lang_code)
         model_changes = self.normalize_models_for_language()
         self.save_config(self.config)
         self.lang_menu_item.set_label(f"Language: {lang_code}")
-        if self.model_menu_item:
-            self.model_menu_item.set_label(f"Model: {self.config['model']}")
+        self.update_model_menu_state()
         print(f"[whisper-dictate] Language changed to: {lang_code}")
+        if old_model != self.config.get("model", "base"):
+            self.model = None  # Force reload
+            threading.Thread(target=self.load_model, daemon=True).start()
         if model_changes:
             msg = "Adjusted non-English model config: " + ", ".join(model_changes)
             print(f"[whisper-dictate] {msg}")

@@ -70,6 +70,10 @@ Edit `~/.config/whisper-dictate/config.json`:
   "hotkey": "<Alt>d",
   "model": "base",
   "language": "en",
+  "language_models": {
+    "en": "distil-large-v3",
+    "nl": "large"
+  },
   "output_mode": "type"
 }
 ```
@@ -79,6 +83,7 @@ Edit `~/.config/whisper-dictate/config.json`:
 | `hotkey` | Global hotkey | `<Ctrl>`, `<Shift>`, `<Alt>`, `<Super>` + key |
 | `model` | Whisper model size | `tiny`, `base`, `small`, `medium`, `large` |
 | `language` | Language code | `en`, `nl`, `de`, etc. |
+| `language_models` | Last selected model per language | JSON object keyed by language code |
 | `output_mode` | How to output text | `type`, `clipboard`, `both` |
 
 ### Text Replacements
