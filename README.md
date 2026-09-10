@@ -59,7 +59,6 @@ Or with options:
 - **Mode: Type** - Check to type into active window
 - **Mode: Clipboard** - Check to copy to clipboard
 - **Model** - Whisper, distil-whisper, or Qwen3-ASR 1.7B
-- **Context** - None, developer jargon, or custom `context.txt`
 - **Settings** - Open config file
 
 ## Configuration
@@ -95,7 +94,7 @@ Edit `~/.config/whisper-dictate/config.json`:
 
 Qwen3-ASR (`qwen3-asr-1.7b`) needs `transformers>=5.13` and about 6–10 GB VRAM on GPU (CPU works, but is slow). First load downloads `Qwen/Qwen3-ASR-1.7B-hf` (~4.5 GB). Select it from the tray **Model** menu; if remote mode is on, that Qwen id is sent to the GPU server.
 
-**Context** (tray submenu):
+ASR context is set in config files (no tray control for now):
 
 | Pack | Prompt |
 |------|--------|
@@ -103,7 +102,7 @@ Qwen3-ASR (`qwen3-asr-1.7b`) needs `transformers>=5.13` and about 6–10 GB VRAM
 | `developer` | Built-in git/K8s/Python/JS/CLI jargon list |
 | `custom` | `~/.config/whisper-dictate/context.txt` |
 
-`context_prompt` is appended in every case. Qwen receives this as `prompt`; Whisper as `initial_prompt`. Replacements in `replacements.yml` still run after transcription.
+Set `context_pack` / `context_prompt` in `config.json`. `context_prompt` is appended in every case. Qwen receives this as `prompt`; Whisper as `initial_prompt`. Replacements in `replacements.yml` still run after transcription.
 
 ### Text Replacements
 

@@ -1355,30 +1355,6 @@ class WhisperDictate:
         menu.append(lang_item)
         self.lang_menu_item = lang_item
 
-        current_pack = self.config.get("context_pack", "none")
-        context_item = Gtk.MenuItem(label=f"Context: {current_pack}")
-        context_submenu = Gtk.Menu()
-        packs = [
-            ("none", "None"),
-            ("developer", "Developer jargon"),
-            ("custom", "Custom (context.txt)"),
-        ]
-        pack_group = None
-        self.context_items = {}
-        for pack_id, pack_label in packs:
-            if pack_group is None:
-                radio = Gtk.RadioMenuItem(label=pack_label)
-                pack_group = radio
-            else:
-                radio = Gtk.RadioMenuItem(label=pack_label, group=pack_group)
-            radio.set_active(pack_id == current_pack)
-            radio.connect("toggled", self.on_context_changed, pack_id)
-            context_submenu.append(radio)
-            self.context_items[pack_id] = radio
-        context_item.set_submenu(context_submenu)
-        menu.append(context_item)
-        self.context_menu_item = context_item
-
         menu.append(Gtk.SeparatorMenuItem())
 
         # Remote server toggle
@@ -1459,22 +1435,6 @@ class WhisperDictate:
                     )
                 # Preload new model in background
                 threading.Thread(target=self.load_model, daemon=True).start()
-
-    def on_context_changed(self, item, pack_id):
-        """Handle ASR context pack selection."""
-        if not item.get_active():
-            return
-        if self.config.get("context_pack", "none") == pack_id:
-            return
-        self.config["context_pack"] = pack_id
-        self.save_config(self.config)
-        if self.context_menu_item:
-            self.context_menu_item.set_label(f"Context: {pack_id}")
-        print(f"[whisper-dictate] Context pack: {pack_id}")
-        if pack_id == "custom":
-            context_path = CONFIG_DIR / "context.txt"
-            if not context_path.exists():
-                self.notify(f"Create {context_path} with vocabulary to bias ASR")
 
     def on_language_changed(self, item, lang_code):
         """Handle language selection change."""
