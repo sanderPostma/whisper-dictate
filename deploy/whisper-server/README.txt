@@ -27,7 +27,11 @@ Run
    .\run.bat
 
 Edit run.bat to change MODEL (tiny.en / base.en / small.en / medium.en /
-large-v3 / turbo, etc.) or DEVICE (cuda / cpu).
+large-v3 / turbo / qwen3-asr-1.7b, etc.) or DEVICE (cuda / cpu).
+
+Qwen3-ASR requires transformers>=5.13 (see requirements-server.txt) and
+roughly 6-10 GB VRAM. The client may send a "prompt" field in the JSON
+header (developer jargon / custom vocabulary).
 
 Firewall
 --------

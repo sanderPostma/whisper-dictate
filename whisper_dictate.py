@@ -30,6 +30,17 @@ import sounddevice as sd
 import whisper
 import yaml
 
+from asr_context import context_from_config
+from asr_models import (
+    build_remote_header,
+    effective_remote_model,
+    is_distil_model,
+    is_english_only_model,
+    is_qwen_model,
+    multilingual_model,
+)
+from asr_qwen import load_qwen, transcribe_qwen
+
 # Optional: transformers for distil-whisper models
 try:
     from transformers import pipeline as hf_pipeline
@@ -67,6 +78,8 @@ DEFAULT_CONFIG = {
     "silence_threshold": 0.01,
     "silence_gate_delay_ms": 500,
     "output_mode": "type",  # type, clipboard, or both
+    "context_pack": "none",  # none | developer | custom
+    "context_prompt": "",
     "record_timeout_ms": 60000,  # auto-stop after this; hold Alt to extend
     "transcribe_chunk_seconds": 25,
     "remote_server": {
@@ -83,6 +96,7 @@ class WhisperDictate:
     def __init__(self):
         self.config = self.load_config()
         self.model = None
+        self.processor = None
         self.recording = False
         self.audio_data = []
         self.stream = None
@@ -150,19 +164,24 @@ class WhisperDictate:
 
     def is_english_only_model(self, model_name):
         """Return True for model names that should only be used for English."""
-        return bool(model_name) and (
-            model_name.endswith(".en") or self.is_distil_model(model_name)
-        )
+        return is_english_only_model(model_name)
 
     def get_multilingual_model(self, model_name):
         """Return a multilingual equivalent for an English-only model."""
-        if not model_name:
-            return model_name
-        if model_name.endswith(".en"):
-            return model_name[: -len(".en")]
-        if self.is_distil_model(model_name):
-            return "large"
-        return model_name
+        return multilingual_model(model_name)
+
+    def get_asr_context(self):
+        """Return the active jargon/context prompt for ASR."""
+        return context_from_config(self.config, CONFIG_DIR)
+
+    def _torch_device(self):
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return "cuda"
+        except ImportError:
+            pass
+        return "cpu"
 
     def get_language_model_preferences(self):
         """Return persisted per-language model preferences."""
@@ -248,10 +267,11 @@ class WhisperDictate:
     def get_remote_model(self):
         """Return the effective remote model for the selected language."""
         remote_config = self.get_remote_config()
-        model = remote_config.get("model", self.config.get("model", "base"))
-        if self.config.get("language", "en") != "en":
-            return self.get_multilingual_model(model)
-        return model
+        return effective_remote_model(
+            self.config.get("model", "base"),
+            remote_config.get("model", self.config.get("model", "base")),
+            self.config.get("language", "en"),
+        )
 
     def get_cpu_fallback_model(self):
         """Get local fallback model used when remote is down.
@@ -347,7 +367,7 @@ class WhisperDictate:
         """Check if model is a distil-whisper model."""
         if model_name is None:
             model_name = self.config.get("model", "base")
-        return model_name.startswith("distil-")
+        return is_distil_model(model_name)
     
     def load_model(self, model_name=None):
         """Load Whisper model (lazy loading)."""
@@ -361,7 +381,12 @@ class WhisperDictate:
         
         print(f"[whisper-dictate] Loading model: {model_name}...")
         
-        if self.is_distil_model(model_name):
+        if is_qwen_model(model_name):
+            device = self._torch_device()
+            print(f"[whisper-dictate] Qwen device: {device}")
+            self.model, self.processor = load_qwen(model_name, device=device)
+            self._model_backend = "qwen"
+        elif self.is_distil_model(model_name):
             # Use transformers pipeline for distil models
             if not HAS_TRANSFORMERS:
                 print("[whisper-dictate] ERROR: transformers not installed for distil models")
@@ -373,10 +398,12 @@ class WhisperDictate:
                 chunk_length_s=30,
                 device="cpu"
             )
+            self.processor = None
             self._model_backend = "transformers"
         else:
             # Use openai-whisper for standard models
             self.model = whisper.load_model(model_name)
+            self.processor = None
             self._model_backend = "whisper"
         
         self._loaded_model_name = model_name
@@ -644,12 +671,13 @@ class WhisperDictate:
         host = remote_config.get("host", "127.0.0.1")
         port = int(remote_config.get("port", 9876))
         audio_bytes = audio.astype(np.float32).tobytes()
-        header = {
-            "language": self.config.get("language", "en"),
-            "model": self.get_remote_model(),
-            "sample_rate": self.config.get("sample_rate", 16000),
-            "audio_size": len(audio_bytes),
-        }
+        header = build_remote_header(
+            language=self.config.get("language", "en"),
+            model=self.get_remote_model(),
+            sample_rate=self.config.get("sample_rate", 16000),
+            audio_size=len(audio_bytes),
+            prompt=self.get_asr_context(),
+        )
         header_bytes = json.dumps(header).encode("utf-8")
 
         with socket.create_connection((host, port), timeout=5) as sock:
@@ -676,19 +704,31 @@ class WhisperDictate:
             model_name = self.config.get("model", "base")
         self.load_model(model_name=model_name)
         start_time = time.time()
+        prompt = self.get_asr_context()
+        backend = getattr(self, '_model_backend', 'whisper')
 
-        if getattr(self, '_model_backend', 'whisper') == 'transformers':
+        if backend == 'qwen':
+            text = transcribe_qwen(
+                self.model,
+                self.processor,
+                audio,
+                language=self.config.get("language"),
+                prompt=prompt,
+            )
+        elif backend == 'transformers':
             result = self.model({
                 "array": audio,
                 "sampling_rate": self.config["sample_rate"]
             })
             text = result.get("text", "").strip()
         else:
-            result = self.model.transcribe(
-                audio,
-                language=self.config["language"],
-                fp16=False  # CPU mode
-            )
+            transcribe_kwargs = {
+                "language": self.config["language"],
+                "fp16": False,  # CPU mode
+            }
+            if prompt:
+                transcribe_kwargs["initial_prompt"] = prompt
+            result = self.model.transcribe(audio, **transcribe_kwargs)
             text = result["text"].strip()
 
         elapsed = time.time() - start_time
@@ -1267,6 +1307,8 @@ class WhisperDictate:
             "distil-medium.en",
             "distil-large-v2",
             "distil-large-v3",
+            "---",
+            "qwen3-asr-1.7b",
         ]
         group = None
         self.model_items = {}
@@ -1312,6 +1354,30 @@ class WhisperDictate:
         lang_item.set_submenu(lang_submenu)
         menu.append(lang_item)
         self.lang_menu_item = lang_item
+
+        current_pack = self.config.get("context_pack", "none")
+        context_item = Gtk.MenuItem(label=f"Context: {current_pack}")
+        context_submenu = Gtk.Menu()
+        packs = [
+            ("none", "None"),
+            ("developer", "Developer jargon"),
+            ("custom", "Custom (context.txt)"),
+        ]
+        pack_group = None
+        self.context_items = {}
+        for pack_id, pack_label in packs:
+            if pack_group is None:
+                radio = Gtk.RadioMenuItem(label=pack_label)
+                pack_group = radio
+            else:
+                radio = Gtk.RadioMenuItem(label=pack_label, group=pack_group)
+            radio.set_active(pack_id == current_pack)
+            radio.connect("toggled", self.on_context_changed, pack_id)
+            context_submenu.append(radio)
+            self.context_items[pack_id] = radio
+        context_item.set_submenu(context_submenu)
+        menu.append(context_item)
+        self.context_menu_item = context_item
 
         menu.append(Gtk.SeparatorMenuItem())
 
@@ -1393,6 +1459,22 @@ class WhisperDictate:
                     )
                 # Preload new model in background
                 threading.Thread(target=self.load_model, daemon=True).start()
+
+    def on_context_changed(self, item, pack_id):
+        """Handle ASR context pack selection."""
+        if not item.get_active():
+            return
+        if self.config.get("context_pack", "none") == pack_id:
+            return
+        self.config["context_pack"] = pack_id
+        self.save_config(self.config)
+        if self.context_menu_item:
+            self.context_menu_item.set_label(f"Context: {pack_id}")
+        print(f"[whisper-dictate] Context pack: {pack_id}")
+        if pack_id == "custom":
+            context_path = CONFIG_DIR / "context.txt"
+            if not context_path.exists():
+                self.notify(f"Create {context_path} with vocabulary to bias ASR")
 
     def on_language_changed(self, item, lang_code):
         """Handle language selection change."""
@@ -1762,9 +1844,8 @@ def main():
     )
     parser.add_argument(
         "--model",
-        choices=["tiny", "base", "small", "medium", "large"],
         default=None,
-        help="Whisper model size"
+        help="ASR model (e.g. base, large, distil-large-v3, qwen3-asr-1.7b)"
     )
     parser.add_argument(
         "--language", "-l",

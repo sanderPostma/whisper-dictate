@@ -2,7 +2,7 @@
 
 Voice-to-text dictation with system tray integration. Press hotkey to record, press again to transcribe and type.
 
-Uses OpenAI's Whisper for accurate speech recognition with full context understanding.
+Uses OpenAI Whisper, distil-whisper, or Qwen3-ASR for speech recognition. Qwen3-ASR can take a vocabulary/context prompt so developer jargon is more likely to land correctly.
 
 ## Features
 
@@ -13,6 +13,7 @@ Uses OpenAI's Whisper for accurate speech recognition with full context understa
 - **Text replacements** - Post-process transcriptions (e.g., "slash" → "/", "enter" → execute)
 - **Desktop notifications** - Visual feedback for recording status
 - **Configurable** - Customize hotkey, model size, language, output mode
+- **ASR context packs** - Bias transcription toward developer jargon (or a custom vocabulary file)
 
 ## Installation
 
@@ -57,6 +58,8 @@ Or with options:
 - **Record/Stop** - Toggle recording
 - **Mode: Type** - Check to type into active window
 - **Mode: Clipboard** - Check to copy to clipboard
+- **Model** - Whisper, distil-whisper, or Qwen3-ASR 1.7B
+- **Context** - None, developer jargon, or custom `context.txt`
 - **Settings** - Open config file
 
 ## Configuration
@@ -74,17 +77,33 @@ Edit `~/.config/whisper-dictate/config.json`:
     "en": "distil-large-v3",
     "nl": "large"
   },
-  "output_mode": "type"
+  "output_mode": "type",
+  "context_pack": "developer",
+  "context_prompt": ""
 }
 ```
 
 | Setting | Description | Options |
 |---------|-------------|---------|
 | `hotkey` | Global hotkey | `<Ctrl>`, `<Shift>`, `<Alt>`, `<Super>` + key |
-| `model` | Whisper model size | `tiny`, `base`, `small`, `medium`, `large` |
+| `model` | ASR model | Whisper sizes, `distil-*`, or `qwen3-asr-1.7b` |
 | `language` | Language code | `en`, `nl`, `de`, etc. |
 | `language_models` | Last selected model per language | JSON object keyed by language code |
 | `output_mode` | How to output text | `type`, `clipboard`, `both` |
+| `context_pack` | Vocabulary prompt sent to the ASR model | `none`, `developer`, `custom` |
+| `context_prompt` | Extra terms always appended to the pack | free text |
+
+Qwen3-ASR (`qwen3-asr-1.7b`) needs `transformers>=5.13` and about 6–10 GB VRAM on GPU (CPU works, but is slow). First load downloads `Qwen/Qwen3-ASR-1.7B-hf` (~4.5 GB). Select it from the tray **Model** menu; if remote mode is on, that Qwen id is sent to the GPU server.
+
+**Context** (tray submenu):
+
+| Pack | Prompt |
+|------|--------|
+| `none` | No vocabulary hint (unless `context_prompt` is set) |
+| `developer` | Built-in git/K8s/Python/JS/CLI jargon list |
+| `custom` | `~/.config/whisper-dictate/context.txt` |
+
+`context_prompt` is appended in every case. Qwen receives this as `prompt`; Whisper as `initial_prompt`. Replacements in `replacements.yml` still run after transcription.
 
 ### Text Replacements
 
@@ -121,6 +140,7 @@ See `replacements.example.yml` for a full example.
 | small | ~5-8s | Great | ~2GB |
 | medium | ~15-20s | Excellent | ~5GB |
 | large | ~30s+ | Best | ~10GB |
+| qwen3-asr-1.7b | GPU: fast / CPU: slow | Strong, promptable | ~6–10GB VRAM |
 
 ## Autostart
 

@@ -1,5 +1,5 @@
 openai-whisper
 numpy
-transformers
+transformers>=5.13.0
 accelerate
 pywin32; sys_platform == "win32"

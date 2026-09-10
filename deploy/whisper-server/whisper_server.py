@@ -22,6 +22,9 @@ from collections import OrderedDict
 import numpy as np
 import whisper
 
+from asr_models import is_distil_model, is_qwen_model
+from asr_qwen import load_qwen, transcribe_qwen
+
 try:
     import torch
     HAS_TORCH = True
@@ -88,10 +91,6 @@ class WhisperTCPServer:
         else:
             print("[whisper-server] No startup model; will load on first client request")
 
-    @staticmethod
-    def _is_distil(model_name):
-        return model_name.startswith("distil-")
-
     def _free_vram(self):
         gc.collect()
         if HAS_TORCH and self.device == "cuda" and torch.cuda.is_available():
@@ -113,7 +112,10 @@ class WhisperTCPServer:
 
     def _load_model(self, model_name):
         print(f"[whisper-server] Loading model '{model_name}' on {self.device}...")
-        if self._is_distil(model_name):
+        if is_qwen_model(model_name):
+            obj = load_qwen(model_name, self.device)
+            backend = "qwen"
+        elif is_distil_model(model_name):
             if not HAS_TRANSFORMERS:
                 detail = f" (import error: {_TRANSFORMERS_IMPORT_ERR})" if _TRANSFORMERS_IMPORT_ERR else ""
                 raise RuntimeError(
@@ -199,10 +201,20 @@ class WhisperTCPServer:
         entry = self._cache_entry
         return entry[1] if entry else None
 
-    def _transcribe(self, audio, language, requested_model):
+    def _transcribe(self, audio, language, requested_model, prompt=None):
         with self.model_lock:
             if requested_model and requested_model != self.model_name:
                 self._ensure_model_locked(requested_model)
+
+            if self.backend == "qwen":
+                text = transcribe_qwen(
+                    self.model,
+                    self.processor,
+                    audio,
+                    language=language,
+                    prompt=prompt,
+                )
+                return {"text": text}
 
             if self.backend == "distil":
                 rms = float(np.sqrt(np.mean(audio ** 2)))
@@ -222,11 +234,13 @@ class WhisperTCPServer:
                 print(f"[whisper-server] distil result: {repr(text)}")
                 return {"text": text}
 
-            return self.model.transcribe(
-                audio,
-                language=language,
-                fp16=(self.device == "cuda")
-            )
+            transcribe_kwargs = {
+                "language": language,
+                "fp16": (self.device == "cuda"),
+            }
+            if prompt and str(prompt).strip():
+                transcribe_kwargs["initial_prompt"] = prompt
+            return self.model.transcribe(audio, **transcribe_kwargs)
 
     def handle_client(self, conn, addr):
         with conn:
@@ -258,9 +272,12 @@ class WhisperTCPServer:
 
                 requested_model = header.get("model", self.model_name)
                 language = header.get("language")
+                prompt = header.get("prompt")
 
                 start = time.time()
-                result = self._transcribe(audio, language, requested_model)
+                result = self._transcribe(
+                    audio, language, requested_model, prompt=prompt
+                )
                 response["text"] = result.get("text", "").strip()
                 response["elapsed"] = time.time() - start
             except Exception as e:
