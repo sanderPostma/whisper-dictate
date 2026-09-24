@@ -6,7 +6,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from live_output import WezTermTarget, XdotoolTarget, choose_target, wezterm_focused_pane
+from live_output import (WezTermTarget, XdotoolTarget, choose_target, wezterm_focused_pane,
+                         wezterm_line_context)
 from live_session import Edit
 
 LIST_CLIENTS = ("wezterm", "cli", "list-clients")
@@ -76,6 +77,56 @@ class WezTermTests(unittest.TestCase):
     def test_switching_to_another_x_window_is_focus_loss(self):
         run = FakeRun({LIST_CLIENTS: clients((7, 0)), ACTIVE_WINDOW: "99\n"})
         self.assertFalse(WezTermTarget(7, "42", run).still_focused())
+
+
+LIST_PANES = ("wezterm", "cli", "list", "--format")
+GET_TEXT = ("wezterm", "cli", "get-text")
+
+
+def screen(row, cursor_x, pane=7, cursor_y=39):
+    return FakeRun({
+        LIST_PANES: json.dumps([{"pane_id": pane, "cursor_x": cursor_x, "cursor_y": cursor_y}]),
+        GET_TEXT: row + "\n",
+        LIST_CLIENTS: clients((pane, 0)),
+        ACTIVE_WINDOW: "42\n",
+    })
+
+
+class WezTermLineContextTests(unittest.TestCase):
+    def test_empty_prompt_has_no_context(self):
+        self.assertEqual(wezterm_line_context(7, screen("\u276f\u00a0", 2)), ("", ""))
+
+    def test_prompt_symbol_is_dropped(self):
+        self.assertEqual(wezterm_line_context(7, screen("\u276f This is", 9)), ("This is", ""))
+
+    def test_shell_prompt_is_dropped(self):
+        run = screen("sander@pcRyzen:~/src$ git commit", 32)
+        self.assertEqual(wezterm_line_context(7, run), ("git commit", ""))
+
+    def test_empty_shell_prompt_has_no_context(self):
+        self.assertEqual(wezterm_line_context(7, screen("user@host:~$ ", 13)), ("", ""))
+
+    def test_mid_line_splits_at_the_cursor(self):
+        run = screen("$ His is a test sentence.            ", 11)
+        self.assertEqual(wezterm_line_context(7, run), ("His is a ", "test sentence."))
+
+    def test_wide_characters_take_two_cells(self):
+        # "> " is 2 cells, "\u4f60\u597d" 4 more, " x" 2 more: cell 8 is right after "x".
+        self.assertEqual(wezterm_line_context(7, screen("> \u4f60\u597d x rest", 8)),
+                         ("\u4f60\u597d x", " rest"))
+
+    def test_reads_the_cursor_row(self):
+        run = screen("> hi", 4, cursor_y=12)
+        wezterm_line_context(7, run)
+        cmd = [c for c, _ in run.calls if tuple(c[:3]) == GET_TEXT][0]
+        self.assertEqual(cmd[-4:], ["--start-line", "12", "--end-line", "12"])
+
+    def test_unknown_pane_is_none(self):
+        self.assertIsNone(wezterm_line_context(8, screen("> hi", 4)))
+
+    def test_target_exposes_line_context(self):
+        self.assertEqual(WezTermTarget(7, "42", screen("\u276f fix the", 9)).line_context(),
+                         ("fix the", ""))
 
 
 class XdotoolTests(unittest.TestCase):

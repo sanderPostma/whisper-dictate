@@ -17,6 +17,11 @@ class FakeLine:
         return self.context
 
 
+class FakeAchatSource(whisper_dictate.AchatTarget):
+    def __init__(self):
+        pass
+
+
 def app(**config):
     a = object.__new__(WhisperDictate)
     a.config = {"output_mode": "type", **config}
@@ -42,7 +47,7 @@ class OneShotOutputTests(unittest.TestCase):
     def test_achat_line_is_used_instead_of_keystrokes(self):
         with mock.patch.object(whisper_dictate, "type_into_line", return_value=True) as typed, \
                 mock.patch.object(whisper_dictate.subprocess, "run") as run:
-            app().output_text("The end", achat_target=object())
+            app().output_text("The end", line_source=FakeAchatSource())
         typed.assert_called_once()
         run.assert_not_called()
 
@@ -50,7 +55,7 @@ class OneShotOutputTests(unittest.TestCase):
         with mock.patch.object(whisper_dictate, "type_into_line", return_value=False), \
                 mock.patch.object(whisper_dictate.subprocess, "run") as run, \
                 mock.patch.object(whisper_dictate.time, "sleep"):
-            app().output_text("The end", achat_target=object())
+            app().output_text("The end", line_source=FakeAchatSource())
         self.assertEqual(run.call_args[0][0][:2], ["xdotool", "type"])
 
     def test_single_word_lowercasing_left_to_the_line(self):
@@ -58,6 +63,27 @@ class OneShotOutputTests(unittest.TestCase):
         a.load_replacements = lambda: {"zzqx": "q"}
         self.assertEqual(a.apply_replacements("API", lower_single_word=False), "API")
         self.assertEqual(a.apply_replacements("API"), "api")
+
+
+class ScreenContextTests(unittest.TestCase):
+    """A WezTerm pane without achat: case and spacing from the screen, typed with keys."""
+
+    def typed(self, text, context):
+        source = whisper_dictate.WezTermTarget(7, "42")
+        source.line_context = lambda: context
+        with mock.patch.object(whisper_dictate.subprocess, "run") as run, \
+                mock.patch.object(whisper_dictate.time, "sleep"), mock.patch("builtins.print"):
+            app().output_text(text, line_source=source)
+        return run.call_args[0][0][-1] if run.called else None
+
+    def test_continuing_a_sentence(self):
+        self.assertEqual(self.typed("We are not going", ("ok", "")), " we are not going")
+
+    def test_empty_prompt_keeps_the_capital(self):
+        self.assertEqual(self.typed("We are not going", ("", "")), "We are not going")
+
+    def test_unreadable_screen_types_as_is(self):
+        self.assertEqual(self.typed("We are", None), "We are")
 
 
 class LivePostprocessTests(unittest.TestCase):

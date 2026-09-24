@@ -42,9 +42,9 @@ from asr_models import (
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
 from live_controller import LiveController, select_transcribers
-from live_output import choose_target
+from live_output import WezTermTarget, choose_target
 from live_segmenter import LiveSegmenter
-from live_session import LiveSession
+from live_session import LiveSession, normalise
 
 # Optional: transformers for distil-whisper models
 try:
@@ -775,27 +775,32 @@ class WhisperDictate:
         finally:
             self.oneshot_transcribing = False
 
-    def _oneshot_achat_target(self):
-        """The `achat run` session in the focused WezTerm pane, if any."""
+    def _oneshot_line_source(self):
+        """What can tell us the text around the cursor in the focused window.
+
+        An `achat run` session's input socket (exact, and typed into), else
+        the WezTerm pane's screen (approximate, typed with keys), else None.
+        """
         if "wezterm" not in (self.get_focused_window_class() or "").lower():
             return None
         try:
             target = AchatTarget.detect()
+            if target is not None:
+                print(f"[whisper-dictate] one-shot: achat session {target.sock_path} "
+                      f"(pane {target.pane_id})")
+                return target
+            target = WezTermTarget.detect()
         except Exception as e:
-            print(f"[whisper-dictate] achat detection failed: {e}")
+            print(f"[whisper-dictate] one-shot: line detection failed: {e}")
             return None
-        if target is None:
-            print("[whisper-dictate] one-shot: no achat input socket for the focused pane "
-                  "(not under `achat run`, or an achat build without the socket); typing keys")
-        else:
-            print(f"[whisper-dictate] one-shot: achat session {target.sock_path} "
-                  f"(pane {target.pane_id})")
+        if target is not None:
+            print(f"[whisper-dictate] one-shot: no achat socket; reading pane {target.pane_id}'s screen")
         return target
 
-    def _oneshot_prompt(self, achat_target):
-        """ASR context, plus the text before the cursor in an achat prompt."""
+    def _oneshot_prompt(self, line_source):
+        """ASR context, plus the text before the cursor when the line is readable."""
         base = self.get_asr_context()
-        context = achat_target.line_context() if achat_target else None
+        context = line_source.line_context() if line_source else None
         if not context or not context[0].strip():
             return base
         tail = context[0][-int(self.config.get("live_committed_context_chars", 400)):]
@@ -803,8 +808,8 @@ class WhisperDictate:
 
     def _transcribe_and_paste_impl(self, audio):
         GLib.idle_add(lambda: self.update_status("Transcribing..."))
-        achat_target = self._oneshot_achat_target()
-        prompt = self._oneshot_prompt(achat_target)
+        line_source = self._oneshot_line_source()
+        prompt = self._oneshot_prompt(line_source)
 
         try:
             remote_config = self.get_remote_config()
@@ -846,12 +851,12 @@ class WhisperDictate:
             GLib.idle_add(lambda: self.update_status("Ready"))
             return
         
-        # Apply text replacements. In an achat prompt the line decides case,
+        # Apply text replacements. Where the line is readable it decides case,
         # so the blunt single-word lowercasing is left out there.
-        text = self.apply_replacements(text, lower_single_word=achat_target is None)
+        text = self.apply_replacements(text, lower_single_word=line_source is None)
 
         # Output based on mode
-        GLib.idle_add(lambda: self.output_text(text, achat_target=achat_target))
+        GLib.idle_add(lambda: self.output_text(text, line_source=line_source))
     
     def toggle_live(self, *args):
         """Toggle live dictation (type at pauses, correct recent words)."""
@@ -1344,9 +1349,23 @@ class WhisperDictate:
                 )
             threading.Thread(target=restore, daemon=True).start()
 
-    def output_text(self, text, achat_target=None):
+    def output_text(self, text, line_source=None):
         """Output text based on mode (type/clipboard/both)."""
         mode = self.config.get("output_mode", "type")
+        achat_target = line_source if isinstance(line_source, AchatTarget) else None
+
+        if mode in ("type", "both") and line_source is not None and achat_target is None:
+            # A pane without achat: shape the text by what the screen shows
+            # around the cursor, then type it with keys as usual.
+            context = line_source.line_context()
+            if context is not None:
+                shaped = normalise(text, *context)
+                print(f"[whisper-dictate] one-shot: screen before={context[0][-40:]!r} "
+                      f"after={context[1][:20]!r} -> {shaped!r}")
+                text = shaped
+            if not text:
+                self.update_status("Ready")
+                return
 
         if mode in ("type", "both") and achat_target is not None:
             # Straight into the agent's prompt line, shaped by the text around
