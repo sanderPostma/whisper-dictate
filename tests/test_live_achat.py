@@ -149,6 +149,41 @@ class DiscoveryTests(unittest.TestCase):
 
 
 class SendTests(unittest.TestCase):
+    def test_line_text_reads_known_line(self):
+        achat = FakeAchat({"ok": True, "rev": 4, "known": True, "text": "fix the", "cursor": 7})
+        self.assertEqual(target(achat).line_text(), "fix the")
+
+    def test_line_text_none_when_unknown_or_cursor_moved(self):
+        achat = FakeAchat({"ok": True, "rev": 4, "known": False, "text": "", "cursor": 0},
+                          {"ok": True, "rev": 4, "known": True, "text": "fix", "cursor": 1})
+        t = target(achat)
+        self.assertIsNone(t.line_text())
+        self.assertIsNone(t.line_text())
+
+    def test_line_text_none_when_socket_gone(self):
+        self.assertIsNone(target(FakeAchat(ConnectionRefusedError())).line_text())
+
+    def test_dropped_flag(self):
+        achat = FakeAchat(
+            {"ok": True, "rev": 11},
+            {"ok": False, "error": "conflict", "rev": 12},
+            {"ok": False, "error": "unknown_line"},
+            {"ok": True, "rev": 12, "known": False, "text": "", "cursor": 0},
+            {"ok": False, "error": "conflict", "rev": 13},
+            {"ok": True, "rev": 13, "known": True, "text": "hi", "cursor": 2},
+            {"ok": True, "rev": 15},
+        )
+        t = target(achat)
+        t.send(Edit(0, "a"))
+        self.assertFalse(t.last_send_dropped)
+        t.send(Edit(1, "b"))  # refused correction: the fast text is still there
+        self.assertFalse(t.last_send_dropped)
+        t.send(Edit(0, "c"))  # append refused on an Unknown line: words lost
+        self.assertTrue(t.last_send_dropped)
+        t.send(Edit(0, "d"))  # append retried after operator text: typed
+        self.assertFalse(t.last_send_dropped)
+
+
     def test_edit_is_compare_and_swap_and_tracks_rev(self):
         achat = FakeAchat({"ok": True, "rev": 13}, {"ok": True, "rev": 17})
         t = target(achat)
@@ -175,6 +210,15 @@ class SendTests(unittest.TestCase):
         self.assertFalse(t.send(Edit(0, " two")))  # typed, but the window must be committed
         self.assertEqual(achat.requests[2]["expect_rev"], 12)
         self.assertEqual(t.rev, 16)
+
+    def test_append_retry_drops_its_space_after_operator_space(self):
+        achat = FakeAchat(
+            {"ok": False, "error": "conflict", "rev": 12},
+            {"ok": True, "rev": 12, "known": True, "text": "hi ok ", "cursor": 6},
+            {"ok": True, "rev": 15},
+        )
+        target(achat).send(Edit(0, " two"))
+        self.assertEqual(achat.requests[2]["insert"], "two")
 
     def test_correction_never_backspaces_over_operator_text(self):
         achat = FakeAchat({"ok": False, "error": "conflict", "rev": 12})

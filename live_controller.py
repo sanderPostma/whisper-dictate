@@ -104,6 +104,8 @@ class LiveController:
             self._retarget()
         if self.session.should_commit(incoming_s=chunk.t1 - chunk.t0):
             self.session.commit()
+        if self.session.chunk_count == 0:
+            self._sync_line_context()
         self.session.add_chunk(chunk.audio, chunk.t0, chunk.t1)
         try:
             raw = self.fast_transcribe(chunk.audio, self.session.fast_prompt())
@@ -156,6 +158,15 @@ class LiveController:
             if new is not None:
                 self.target = new
 
+    def _sync_line_context(self):
+        """At the start of a window, take context from the target's real line."""
+        line_text = getattr(self.target, "line_text", None)
+        if line_text is None:
+            return
+        text = line_text()
+        if text is not None:
+            self.session.set_context(text)
+
     def _send(self, edit):
         try:
             if self.target.send(edit):
@@ -165,6 +176,9 @@ class LiveController:
         self.session.commit()
         if getattr(self.target, "recoverable_rejections", False):
             self.log("[live] edit rejected; committing window")
+            if getattr(self.target, "last_send_dropped", False):
+                self._report("Live dictation: some words were not typed; "
+                             "the prompt line was being edited.")
         else:
             self.log("[live] output failed; committing window and disabling corrections")
             self.corrections_enabled = False

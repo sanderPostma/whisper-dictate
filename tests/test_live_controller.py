@@ -251,6 +251,77 @@ class LiveControllerTests(unittest.TestCase):
         self.assertEqual(done, [True])
 
 
+class LineTextTarget(FakeTarget):
+    """A target that knows the text already on its line (like achat)."""
+
+    def __init__(self, line, ok=True):
+        super().__init__(ok)
+        self.line = line
+        self.dropped = False
+
+    def line_text(self):
+        return self.line
+
+    @property
+    def last_send_dropped(self):
+        return self.dropped
+
+
+class LineContextTests(unittest.TestCase):
+    def make(self, fast, target):
+        self.errors = []
+        return LiveController(LiveSession(), target, fast, None,
+                              on_error=self.errors.append, log=lambda *_: None)
+
+    def test_existing_line_text_is_context_for_the_first_chunk(self):
+        target = LineTextTarget("fix the")
+        fast = Script("Widget")
+        ctl = self.make(fast, target)
+        ctl.process(chunk(0.0, 1.0))
+        self.assertEqual(target.edits, [Edit(0, " widget")])
+        self.assertEqual(fast.prompts, ["fix the"])
+
+    def test_line_is_reread_after_a_rejection(self):
+        target = LineTextTarget("", ok=False)
+        target.recoverable_rejections = True
+        ctl = self.make(Script("Hello", "there"), target)
+        ctl.process(chunk(0.0, 1.0))
+        target.ok = True
+        target.line = "Hello typed "
+        ctl.process(chunk(1.0, 2.0))
+        self.assertEqual(target.edits[-1], Edit(0, "there"))
+
+    def test_line_not_reread_mid_window(self):
+        target = LineTextTarget("")
+        ctl = self.make(Script("Hello", "there"), target)
+        ctl.process(chunk(0.0, 1.0))
+        target.line = "something else"
+        ctl.process(chunk(1.0, 2.0))
+        self.assertEqual(target.edits[-1], Edit(0, " there"))
+
+    def test_unknown_line_keeps_session_context(self):
+        target = LineTextTarget(None)
+        ctl = self.make(Script("Hello"), target)
+        ctl.process(chunk(0.0, 1.0))
+        self.assertEqual(target.edits, [Edit(0, "Hello")])
+
+    def test_dropped_text_is_reported_once(self):
+        target = LineTextTarget("", ok=False)
+        target.recoverable_rejections = True
+        target.dropped = True
+        ctl = self.make(Script("a", "b"), target)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(chunk(1.0, 2.0))
+        self.assertEqual(len(self.errors), 1)
+
+    def test_rejection_that_still_typed_is_not_reported(self):
+        target = LineTextTarget("", ok=False)
+        target.recoverable_rejections = True
+        ctl = self.make(Script("a"), target)
+        ctl.process(chunk(0.0, 1.0))
+        self.assertEqual(self.errors, [])
+
+
 class SelectTranscribersTests(unittest.TestCase):
     def setUp(self):
         self.down = False

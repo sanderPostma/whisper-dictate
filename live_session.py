@@ -5,6 +5,7 @@ window may be rewritten by a correction; committed text is never edited again
 and is only used as context for later transcriptions.
 """
 
+import unicodedata
 from dataclasses import dataclass
 
 import numpy as np
@@ -32,7 +33,9 @@ def strip_echo(raw, context, max_words=8, min_words=3):
 
 def normalise(raw, before):
     """Turn a raw transcription into the exact text to type after `before`."""
-    text = " ".join((raw or "").split())
+    # Precomposed: achat refuses combining marks, and backspace counts are
+    # per character on every target.
+    text = unicodedata.normalize("NFC", " ".join((raw or "").split()))
     text = strip_echo(text, before).strip()
     if not any(ch.isalnum() for ch in text):
         return ""
@@ -130,6 +133,10 @@ class LiveSession:
         self.committed_text = text[-max(self.context_chars, 1):]
         self._chunks = []
         self._pieces = []
+
+    def set_context(self, text):
+        """Replace committed text with what is really on the line (window empty)."""
+        self.committed_text = text[-self.context_chars:] if self.context_chars > 0 else ""
 
     def _prompt(self, text):
         tail = text[-self.context_chars:].strip() if self.context_chars > 0 else ""

@@ -60,6 +60,11 @@ class NormaliseTests(unittest.TestCase):
         self.assertEqual(strip_echo("the branch", "merge the branch"), "the branch")
 
 
+    def test_decomposed_accents_are_precomposed(self):
+        # achat refuses combining marks, and every target counts characters.
+        self.assertEqual(normalise("cafe\u0301", ""), "caf\u00e9")
+
+
 class FastResultTests(unittest.TestCase):
     def test_fast_result_is_append_edit(self):
         s = LiveSession()
@@ -157,6 +162,20 @@ class CommitTests(unittest.TestCase):
         self.assertEqual(s.chunk_count, 0)
         s.add_chunk(audio(1), 1.0, 2.0)
         self.assertEqual(s.add_fast_result(2.0, "General"), Edit(0, " general"))
+
+
+    def test_set_context_replaces_committed_text(self):
+        s = session_with([(0.0, 1.0, "Hello")])
+        s.commit()
+        s.set_context("fix the")
+        s.add_chunk(audio(1), 1.0, 2.0)
+        self.assertEqual(s.add_fast_result(2.0, "Widget"), Edit(0, " widget"))
+        self.assertEqual(s.fast_prompt(), "fix the widget")
+
+    def test_set_context_trims_to_context_chars(self):
+        s = LiveSession(context_chars=5)
+        s.set_context("hello there")
+        self.assertEqual(s.committed_text, "there")
 
 
 class PromptTests(unittest.TestCase):

@@ -134,6 +134,7 @@ class AchatTarget:
         self.sock_path = sock_path
         self.rev = rev
         self.dead = False
+        self.last_send_dropped = False  # the last send's inserted text never landed
         self._run = run
         self._request = request
         self._sleep = sleep
@@ -196,11 +197,13 @@ class AchatTarget:
     def send(self, edit):
         """Apply the edit. False means the typed window no longer matches the
         line (the operator touched it), so the caller must commit the window."""
+        self.last_send_dropped = False
         if not edit.backspace and not edit.insert:
             return True
         insert = _clean_insert(edit.insert)
         resp = self._edit(edit.backspace, insert)
         if resp is None:
+            self.last_send_dropped = edit.backspace == 0
             return False
         if resp.get("ok"):
             rev = _rev(resp.get("rev"))
@@ -215,12 +218,22 @@ class AchatTarget:
             rev = _rev(resp["rev"])
             if rev is not None:
                 self.rev = rev
-        if resp.get("error") in _LINE_MOVED and edit.backspace == 0 and self._refresh():
+        # A refused correction loses nothing (the fast text is still there);
+        # a refused append loses the words unless the retry below lands them.
+        self.last_send_dropped = edit.backspace == 0
+        state = None
+        if resp.get("error") in _LINE_MOVED and edit.backspace == 0:
+            state = self._refresh()
+        if state is not None:
             # Appending after the operator's text is fine (backspacing over it
             # never is). Still report False: the window now ends in our text
-            # but a correction must not reach back past theirs.
+            # but a correction must not reach back past theirs. The window is
+            # committed, so the spacing can follow the real line.
+            if (state.get("text") or "").endswith((" ", "\n")):
+                insert = insert.lstrip(" ")
             resp = self._edit(0, insert)
             if resp is not None and resp.get("ok"):
+                self.last_send_dropped = False
                 rev = _rev(resp.get("rev"))
                 if rev is not None:
                     self.rev = rev
@@ -228,6 +241,14 @@ class AchatTarget:
                     self._log("[live] achat reply without rev")
                     self.dead = True
         return False
+
+    def line_text(self):
+        """Text on the prompt line when an append would land after it, else None."""
+        state = self._call({"op": "state"})
+        if not state or not state.get("ok") or not state.get("known"):
+            return None
+        text = state.get("text") or ""
+        return text if state.get("cursor") == len(text) else None
 
     def still_focused(self):
         if self.dead:

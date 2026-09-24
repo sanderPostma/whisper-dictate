@@ -70,7 +70,8 @@ place (backspace + retype). Press the hotkey again to stop.
 
 - WezTerm pane running `achat run`: typed into the agent's prompt line through achat's
   input-control socket. Every edit is checked against the line's revision, so typing by
-  hand or an incoming nudge is never overwritten: dictation just continues after it.
+  hand or an incoming nudge is never overwritten: dictation just continues after it,
+  and text already in the prompt is used as context (spacing, capitalisation).
   Needs an `achat` build with the input socket; restart old `achat run` sessions.
 - Other WezTerm panes: typed into the pane focused at start via `wezterm cli send-text`.
 - Other windows: `xdotool`.
