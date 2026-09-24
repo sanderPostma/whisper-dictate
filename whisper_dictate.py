@@ -87,7 +87,10 @@ DEFAULT_CONFIG = {
     "context_prompt": "",
     "record_timeout_ms": 60000,  # auto-stop after this; hold Alt to extend
     "transcribe_chunk_seconds": 25,
-    "live_hotkey": "<Alt><Shift>d",
+    # Live dictation: press the hotkey twice within live_double_press_s.
+    # An extra dedicated hotkey is optional (e.g. "<Alt><Shift>d").
+    "live_hotkey": "",
+    "live_double_press_s": 1.0,
     "live_pause_ms": 600,
     "live_max_chunk_s": 8,
     "live_window_max_s": 12,
@@ -104,6 +107,24 @@ DEFAULT_CONFIG = {
         "reconnect_check_interval_sec": 120
     }
 }
+
+
+def hotkey_action(live_active, live_busy, recording, since_start, double_press_s=1.0):
+    """What one press of the dictation hotkey does.
+
+    Press once: record (one-shot). Press again within double_press_s: drop
+    that recording and switch to live dictation. Any later press stops
+    whichever mode is running.
+    """
+    if live_active:
+        return "stop_live"
+    if live_busy:
+        return "busy"
+    if recording:
+        if since_start is not None and since_start < double_press_s:
+            return "to_live"
+        return "stop_recording"
+    return "start_recording"
 
 
 class WhisperDictate:
@@ -469,14 +490,43 @@ class WhisperDictate:
     
     def _toggle_recording_impl(self):
         """Actual toggle implementation (runs in main thread)."""
-        if getattr(self, "live_active", False) or getattr(self, "live_busy", False):
-            self.notify("Live dictation is running; stop it first.")
-            return False
-        if self.recording:
+        started = getattr(self, "_recording_started", None)
+        action = hotkey_action(
+            getattr(self, "live_active", False), getattr(self, "live_busy", False),
+            self.recording, None if started is None else time.monotonic() - started,
+            float(self.config.get("live_double_press_s", 1.0)),
+        )
+        if action == "stop_live":
+            self.stop_live()
+        elif action == "busy":
+            self.notify("Live dictation is still finishing; try again in a moment.")
+        elif action == "to_live":
+            print("[whisper-dictate] Double press: switching to live dictation")
+            self.cancel_recording()
+            self.start_live(double_beep=True)
+        elif action == "stop_recording":
             self.stop_recording()
         else:
             self.start_recording()
         return False
+
+    def cancel_recording(self):
+        """Stop a one-shot recording and throw its audio away."""
+        if not self.recording:
+            return
+        self.recording = False
+        if getattr(self, "_record_timeout_id", None):
+            try:
+                GLib.source_remove(self._record_timeout_id)
+            except Exception:
+                pass
+            self._record_timeout_id = None
+        if self.stream:
+            self.stream.stop()
+            self.stream.close()
+            self.stream = None
+        self.audio_data = []
+        self.update_icon(False)
     
     def start_recording(self):
         """Start recording audio."""
@@ -484,6 +534,7 @@ class WhisperDictate:
             return
         
         self.recording = True
+        self._recording_started = time.monotonic()
         self.audio_data = []
         self.update_icon(True)
         self.update_status("🔴 Recording...")
@@ -895,7 +946,7 @@ class WhisperDictate:
             lambda ok, reason: self.set_remote_available(ok, reason),
         )
 
-    def start_live(self, retry=False):
+    def start_live(self, retry=False, double_beep=False):
         if self.recording or getattr(self, "transcribe_active", False):
             self.notify("Stop the current recording before starting live dictation.")
             return
@@ -914,7 +965,7 @@ class WhisperDictate:
                   f"class={wm_class!r}, retry={retry})")
             if not retry:
                 # Focus can be in flux right at the hotkey; look once more.
-                GLib.timeout_add(250, lambda: self.start_live(retry=True) or False)
+                GLib.timeout_add(250, lambda: self.start_live(retry=True, double_beep=double_beep) or False)
                 return
             self.notify("Live dictation: no focused window found.")
             return
@@ -973,7 +1024,10 @@ class WhisperDictate:
             return
         self._live_stream_started = True
         self.live_active = True
-        self.beep_start()
+        if double_beep:
+            self.beep_double()
+        else:
+            self.beep_start()
         self.update_icon(True)
         suffix = "" if correct else " (no corrections)"
         self.update_status(f"⚡ Live → {target.name}{suffix}")
@@ -1444,6 +1498,21 @@ class WhisperDictate:
         """Beep for recording start (higher tone)."""
         self.beep(frequency=1200, duration=0.08)
     
+    def beep_double(self):
+        """Two quick high beeps: live dictation started."""
+        try:
+            sample_rate = 22050
+            n = int(sample_rate * 0.07)
+            t = np.linspace(0, 0.07, n, False)
+            tone = np.sin(1200 * 2 * np.pi * t) * 0.3
+            fade = int(sample_rate * 0.01)
+            tone[:fade] *= np.linspace(0, 1, fade)
+            tone[-fade:] *= np.linspace(1, 0, fade)
+            gap = np.zeros(int(sample_rate * 0.06))
+            sd.play(np.concatenate([tone, gap, tone]).astype(np.float32), sample_rate, blocking=False)
+        except Exception as e:
+            print(f"[whisper-dictate] Beep failed: {e}")
+
     def beep_stop(self):
         """Beep for recording stop (lower tone)."""
         self.beep(frequency=800, duration=0.08)
@@ -2023,7 +2092,7 @@ class WhisperDictate:
         else:
             print(f"✗ Failed to register hotkey {hotkey}")
 
-        live_hotkey = self.config.get("live_hotkey", "<Alt><Shift>d")
+        live_hotkey = self.config.get("live_hotkey", "")
         if live_hotkey:
             if Keybinder.bind(live_hotkey, lambda _keystring: self.toggle_live()):
                 print(f"✓ Live hotkey {live_hotkey} registered")

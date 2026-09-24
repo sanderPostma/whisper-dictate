@@ -63,10 +63,13 @@ Or with options:
 
 ## Live dictation
 
-Press `<Alt><Shift>d` (config `live_hotkey`) or pick **⚡ Live dictation** in the tray,
-then talk. Text is typed at each pause (~0.6 s). With the remote server up, the last
-≤ 12 s are re-transcribed after each pause and recently typed words are corrected in
-place (backspace + retype). Press the hotkey again to stop.
+Press the dictation hotkey (`<Alt>d`) twice within a second (double beep), or pick
+**⚡ Live dictation** in the tray, then talk. A single press still records one-shot; the
+second quick press drops that recording and switches to live. Text is typed at each pause
+(~0.6 s). With the remote server up, the last ≤ 12 s are re-transcribed after each pause
+and recently typed words are corrected in place (backspace + retype). The next press of the
+hotkey stops live dictation. `live_double_press_s` sets the window (default 1.0 s);
+`live_hotkey` can add a separate live hotkey (off by default).
 
 - WezTerm pane running `achat run`: typed into the agent's prompt line through achat's
   input-control socket. Every edit is checked against the line's revision, so typing by
@@ -101,7 +104,7 @@ command, so "the trial period" at the very end of a chunk ends the sentence inst
 
 Config keys: `live_pause_ms`, `live_max_chunk_s`, `live_window_max_s`,
 `live_commit_pause_ms`, `live_max_backspace`, `live_max_command_backspace`, `live_corrections`,
-`live_committed_context_chars`, `live_hotkey`.
+`live_committed_context_chars`, `live_hotkey`, `live_double_press_s`.
 
 ## Configuration
 
