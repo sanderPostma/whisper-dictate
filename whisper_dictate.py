@@ -433,8 +433,12 @@ class WhisperDictate:
             return None
     
     def restore_focus(self, window_id):
-        """Restore focus to a window."""
-        if window_id:
+        """Restore focus to a window, but only if focus actually moved away.
+
+        Re-activating the window that still has focus, while the hotkey's
+        Alt is held, makes Electron apps (Slack, VS Code) open their menu.
+        """
+        if window_id and self.get_focused_window() != window_id:
             try:
                 subprocess.run(
                     ["xdotool", "windowactivate", window_id],
