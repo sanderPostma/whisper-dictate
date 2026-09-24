@@ -310,7 +310,7 @@ class WhisperDictate:
             print(f"[whisper-dictate] Error loading replacements: {e}")
             return {}
     
-    def apply_replacements(self, text, lower_single_word=True):
+    def apply_replacements(self, text, lower_single_word=True, strip_trailing_period=True):
         """Apply text replacements (case-insensitive matching)."""
         replacements = self.load_replacements()
         print(f"[post-process] IN:  |{text}|")
@@ -338,7 +338,7 @@ class WhisperDictate:
             text = new_text
         
         # Remove trailing period (but keep periods between sentences)
-        if text.endswith('.'):
+        if strip_trailing_period and text.endswith('.'):
             text = text[:-1]
             print(f"[post-process] Removed trailing period")
         
@@ -918,7 +918,12 @@ class WhisperDictate:
         controller = LiveController(
             session, target, fast, correct,
             make_target=lambda: choose_target(self.get_focused_window_class()),
-            postprocess=self.apply_replacements,
+            # Replacements only: the session does case and punctuation from the
+            # line. One-shot tidying (lowercase a lone word, drop the final
+            # full stop) made fast passes and corrections disagree from the
+            # first character, so every correction retyped the whole window.
+            postprocess=lambda text: self.apply_replacements(
+                text, lower_single_word=False, strip_trailing_period=False),
             on_error=lambda msg: GLib.idle_add(lambda: self.notify(msg) or False),
             on_done=lambda: GLib.idle_add(self._live_done),
         )
@@ -2019,6 +2024,10 @@ class WhisperDictate:
 
 
 def main():
+    # Under the desktop launcher stdout is a pipe to the journal; without
+    # line buffering the log only shows up when the app exits.
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
     parser = argparse.ArgumentParser(
         description="Whisper Dictate - Voice to text with system tray"
     )

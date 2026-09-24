@@ -8,10 +8,17 @@ this one thread, so the session never sees a correction go stale.
 
 import queue
 import threading
+import time
+
+import numpy as np
 
 from live_segmenter import ChunkReady, LongPause
 
 _STOP = object()
+
+
+def _show(edit):
+    return "no edit" if edit is None else f"-{edit.backspace} +{edit.insert!r}"
 
 
 def select_transcribers(remote_enabled, remote_is_down, remote, local, local_fallback,
@@ -97,22 +104,30 @@ class LiveController:
             self._handle_chunk(event)
         elif isinstance(event, LongPause):
             if self.session.should_commit(long_pause=True):
+                self.log("[live] commit: long pause after sentence end")
                 self.session.commit()
 
     def _handle_chunk(self, chunk):
+        rms = float(np.sqrt(np.mean(chunk.audio ** 2))) if len(chunk.audio) else 0.0
+        self.log(f"[live] chunk {chunk.t0:.2f}-{chunk.t1:.2f}s ({chunk.t1 - chunk.t0:.2f}s, rms {rms:.4f})")
         if not self.target.still_focused():
+            self.log("[live] commit: focus moved")
             self._retarget()
         if self.session.should_commit(incoming_s=chunk.t1 - chunk.t0):
+            self.log("[live] commit: window full")
             self.session.commit()
         if self.session.chunk_count == 0:
             self._sync_line_context()
         self.session.add_chunk(chunk.audio, chunk.t0, chunk.t1)
+        started = time.monotonic()
         try:
             raw = self.fast_transcribe(chunk.audio, self.session.fast_prompt())
         except Exception as e:
             self._report(f"Live transcription failed: {e}")
             return
-        edit = self.session.add_fast_result(chunk.t1, self.postprocess(raw or ""))
+        text = self.postprocess(raw or "")
+        edit = self.session.add_fast_result(chunk.t1, text)
+        self.log(f"[live] fast {time.monotonic() - started:.2f}s raw={raw!r} -> {_show(edit)}")
         if edit is not None:
             self._send(edit)
 
@@ -127,12 +142,16 @@ class LiveController:
         if not self.target.still_focused():
             self._retarget()
             return
+        started = time.monotonic()
         try:
             raw = self.correct_transcribe(audio, s.correction_prompt())
         except Exception as e:
             self.log(f"[live] correction skipped: {e}")
             return
+        before = s.typed_window
         edit = s.apply_correction(t_upto, self.postprocess(raw or ""))
+        self.log(f"[live] correct {time.monotonic() - started:.2f}s over {s.chunk_count} chunks "
+                 f"raw={raw!r} window={before!r} -> {_show(edit)}")
         if edit is not None:
             self._send(edit)
 
@@ -173,6 +192,7 @@ class LiveController:
             return
         if context is not None:
             self.session.set_context(*context)
+            self.log(f"[live] line context before={context[0][-60:]!r} after={context[1][:30]!r}")
 
     def _send(self, edit):
         try:

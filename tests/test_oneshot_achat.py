@@ -60,5 +60,48 @@ class OneShotOutputTests(unittest.TestCase):
         self.assertEqual(a.apply_replacements("API"), "api")
 
 
+class LivePostprocessTests(unittest.TestCase):
+    def test_live_corrections_do_not_retype_the_whole_window(self):
+        # One-shot tidying ("Okay." -> "okay") made the fast pass and the
+        # correction differ at the first character.
+        import numpy as np
+        from live_controller import LiveController
+        from live_segmenter import ChunkReady
+        from live_session import Edit, LiveSession
+
+        a = app()
+        a.load_replacements = lambda: {"zzqx": "q"}
+        edits = []
+
+        class Target:
+            name = "t"
+
+            def send(self, edit):
+                edits.append(edit)
+                return True
+
+            def still_focused(self):
+                return True
+
+        def script(*results):
+            results = list(results)
+            return lambda audio, prompt: results.pop(0)
+
+        def chunk(t0, t1):
+            return ChunkReady(np.zeros(int(16000 * (t1 - t0)), dtype=np.float32), t0, t1)
+
+        postprocess = lambda text: a.apply_replacements(
+            text, lower_single_word=False, strip_trailing_period=False)
+        ctl = LiveController(LiveSession(), Target(), script("Okay.", "I got to go ahead."),
+                             script("Okay, I got to go ahead."), postprocess=postprocess,
+                             log=lambda *_: None)
+        with mock.patch("builtins.print"):
+            ctl.process(chunk(0.0, 1.0))
+            ctl.process(chunk(1.0, 2.0))
+            ctl.correct()
+        self.assertEqual(edits[0], Edit(0, "Okay."))
+        self.assertEqual(edits[-1], Edit(20, ", I got to go ahead."))  # keeps "Okay"
+
+
 if __name__ == "__main__":
     unittest.main()
