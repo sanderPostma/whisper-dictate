@@ -91,6 +91,24 @@ class ScreenContextTests(unittest.TestCase):
         self.assertEqual(self.typed("We are", None), "We are")
 
 
+class OneShotEnterTests(unittest.TestCase):
+    def test_enter_pressed_on_the_line_source_after_typing(self):
+        order = []
+        source = whisper_dictate.WezTermTarget(7, "42")
+        source.line_context = lambda: ("", "")
+        source.press_enter = lambda: order.append("ENTER") or True
+        with mock.patch.object(whisper_dictate.subprocess, "run",
+                               side_effect=lambda cmd, **k: order.append(cmd[-1])) as run, \
+                mock.patch.object(whisper_dictate.time, "sleep"), mock.patch("builtins.print"):
+            app().output_text("/compact", line_source=source, press_enter=True)
+        self.assertEqual(order, ["/compact", "ENTER"])
+
+    def test_enter_alone_without_line_source_uses_xdotool(self):
+        with mock.patch.object(whisper_dictate.subprocess, "run") as run, mock.patch("builtins.print"):
+            app().output_text("", press_enter=True)
+        self.assertEqual(run.call_args[0][0], ["xdotool", "key", "--clearmodifiers", "Return"])
+
+
 class LivePostprocessTests(unittest.TestCase):
     def test_live_corrections_do_not_retype_the_whole_window(self):
         # One-shot tidying ("Okay." -> "okay") made the fast pass and the

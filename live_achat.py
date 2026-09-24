@@ -19,6 +19,7 @@ from live_session import Edit, normalise
 
 BUSY_RETRIES = 8
 BUSY_BACKOFF_S = 0.25
+ENTER_SETTLE_S = 0.15
 
 
 def _rev(value):
@@ -257,6 +258,20 @@ class AchatTarget:
                     self._log("[live] achat reply without rev")
                     self.dead = True
         return False
+
+    def press_enter(self):
+        """Submit the line: Enter as a keystroke on the pane (the socket's edit
+        never submits). achat reads it as the operator's own Enter. A short
+        wait first, so the TUI does not take text and Enter as one paste."""
+        self._sleep(ENTER_SETTLE_S)
+        try:
+            res = self._run(
+                ["wezterm", "cli", "send-text", "--pane-id", str(self.pane_id), "--no-paste"],
+                input=b"\r", capture_output=True, timeout=5,
+            )
+        except Exception:
+            return False
+        return res.returncode == 0
 
     def line_context(self, adopt_rev=True):
         """(text before the cursor, text after it) on a Known line, else None.

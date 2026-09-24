@@ -484,6 +484,52 @@ class KeystrokeLongPauseTests(unittest.TestCase):
         self.assertEqual(len(target.edits), 1)
 
 
+class EnterTarget(FakeTarget):
+    def __init__(self):
+        super().__init__()
+        self.log = []
+
+    def send(self, edit):
+        self.log.append(edit)
+        return super().send(edit)
+
+    def press_enter(self):
+        self.log.append("ENTER")
+        return True
+
+
+class EnterTests(unittest.TestCase):
+    def make(self, fast, target):
+        return LiveController(LiveSession(), target, fast, None, log=lambda *_: None)
+
+    def test_press_enter_types_then_submits(self):
+        target = EnterTarget()
+        ctl = self.make(Script("/compact, press enter."), target)
+        ctl.process(chunk(0.0, 1.0))
+        self.assertEqual(target.log, [Edit(0, "/compact"), "ENTER"])
+
+    def test_after_enter_the_line_starts_fresh(self):
+        target = EnterTarget()
+        ctl = self.make(Script("Do it, press enter.", "Next one"), target)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(chunk(1.0, 2.0))
+        self.assertEqual(target.log[-1], Edit(0, "Next one"))
+        self.assertEqual(ctl.session.history, "Next one")
+
+    def test_nothing_crosses_a_submitted_prompt(self):
+        target = EnterTarget()
+        ctl = self.make(Script("Do it.", "Press enter.", "Scratch that."), target)
+        for i in range(3):
+            ctl.process(chunk(float(i), i + 1.0))
+        self.assertEqual(target.log, [Edit(0, "Do it."), "ENTER"])
+
+    def test_enter_on_a_target_that_cannot_press_it(self):
+        target = FakeTarget()
+        ctl = self.make(Script("Do it, press enter."), target)
+        ctl.process(chunk(0.0, 1.0))
+        self.assertEqual(target.edits, [Edit(0, "Do it")])
+
+
 class SelectTranscribersTests(unittest.TestCase):
     def setUp(self):
         self.down = False

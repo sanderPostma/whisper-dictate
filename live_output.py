@@ -130,6 +130,20 @@ class WezTermTarget:
             return False
         return wezterm_focused_pane(self._run) == self.pane_id
 
+    def press_enter(self):
+        return self.send_keys(b"\r")
+
+    def send_keys(self, data):
+        """Raw bytes to the pane as typed input (\r is Enter)."""
+        try:
+            res = self._run(
+                ["wezterm", "cli", "send-text", "--pane-id", str(self.pane_id), "--no-paste"],
+                input=data, capture_output=True, timeout=5,
+            )
+        except Exception:
+            return False
+        return res.returncode == 0
+
     def line_context(self):
         """Text before the cursor, read off the screen. The text after it is left
         out: a TUI's hardware cursor can sit off the input row, so what follows
@@ -175,6 +189,14 @@ class XdotoolTarget:
 
     def still_focused(self):
         return xdotool_active_window(self._run) == self.window_id
+
+    def press_enter(self):
+        try:
+            res = self._run(["xdotool", "key", "--clearmodifiers", "Return"],
+                            capture_output=True, timeout=5)
+        except Exception:
+            return False
+        return res.returncode == 0
 
 
 def choose_target(wm_class, run=subprocess.run, achat_detect=None):

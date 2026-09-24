@@ -41,6 +41,7 @@ from asr_models import (
 )
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
+from live_commands import split_enter
 from live_controller import LiveController, select_transcribers
 from live_output import WezTermTarget, choose_target
 from live_segmenter import LiveSegmenter
@@ -906,9 +907,11 @@ class WhisperDictate:
         # Apply text replacements. Where the line is readable it decides case,
         # so the blunt single-word lowercasing is left out there.
         text = self.apply_replacements(text, lower_single_word=line_source is None)
+        # "... press enter" (or "enter" said alone) submits after typing.
+        text, press_enter = split_enter(text)
 
         # Output based on mode
-        GLib.idle_add(lambda: self.output_text(text, line_source=line_source))
+        GLib.idle_add(lambda: self.output_text(text, line_source=line_source, press_enter=press_enter))
     
     def toggle_live(self, *args):
         """Toggle live dictation (type at pauses, correct recent words)."""
@@ -1413,7 +1416,22 @@ class WhisperDictate:
                 )
             threading.Thread(target=restore, daemon=True).start()
 
-    def output_text(self, text, line_source=None):
+    def output_text(self, text, line_source=None, press_enter=False):
+        """Output text based on mode, then press Enter if it was asked for."""
+        if text:
+            self._output_text(text, line_source)
+        if press_enter and self.config.get("output_mode", "type") in ("type", "both"):
+            press = getattr(line_source, "press_enter", None)
+            if press is not None:
+                ok = press()
+            else:
+                ok = subprocess.run(["xdotool", "key", "--clearmodifiers", "Return"],
+                                    check=False).returncode == 0
+            print(f"[whisper-dictate] one-shot: Enter pressed ({'ok' if ok else 'failed'})")
+        self.update_status("Ready")
+        return False
+
+    def _output_text(self, text, line_source=None):
         """Output text based on mode (type/clipboard/both)."""
         mode = self.config.get("output_mode", "type")
         achat_target = line_source if isinstance(line_source, AchatTarget) else None

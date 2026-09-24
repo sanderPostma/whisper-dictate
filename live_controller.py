@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-from live_commands import mentions_command, parse_command
+from live_commands import Command, mentions_command, parse_command
 from live_segmenter import ChunkReady, LongPause
 
 _STOP = object()
@@ -135,6 +135,9 @@ class LiveController:
             return
         text = self.postprocess(raw or "")
         command = parse_command(text)
+        if command is not None and command.enter:
+            self._run_enter(chunk, command, raw)
+            return
         if command is not None:
             self._run_command(command, raw)
             return
@@ -199,6 +202,27 @@ class LiveController:
             new = self.make_target()
             if new is not None:
                 self.target = new
+
+    def _run_enter(self, chunk, command, raw):
+        """Type what came with "press enter", then submit the line."""
+        words = Command(rest=command.rest, comma=command.comma, end=command.end)
+        if words.comma or words.end:
+            self._run_command(words, raw)
+        elif words.rest:
+            edit = self.session.add_fast_result(chunk.t1, words.rest)
+            if edit is not None:
+                self._send(edit)
+        press = getattr(self.target, "press_enter", None)
+        if press is None:
+            self.log("[live] this target cannot press Enter")
+            self.session.commit()
+            return
+        ok = press()
+        self.log(f"[live] Enter pressed ({'ok' if ok else 'failed'})")
+        # The line was submitted: a fresh, empty prompt, nothing to correct.
+        self.session.commit()
+        self.session.forget_history()
+        self.session.set_context("", "")
 
     def _run_command(self, command, raw):
         """A spoken repair: one edit over what this session typed."""

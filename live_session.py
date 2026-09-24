@@ -21,6 +21,11 @@ class Edit:
     insert: str
 
 
+def _collapse(text):
+    """Collapse runs of spaces and tabs, keeping line breaks ("new line")."""
+    return "\n".join(" ".join(line.split()) for line in (text or "").split("\n"))
+
+
 def strip_echo(raw, context, max_words=8, min_words=3, min_words_inside=4):
     """Drop a repeat of the context from raw.
 
@@ -31,8 +36,8 @@ def strip_echo(raw, context, max_words=8, min_words=3, min_words_inside=4):
     before it.
     """
     words = context.split()
-    low = " ".join(raw.split()).lower()
-    raw = " ".join(raw.split())
+    raw = _collapse(raw)
+    low = raw.lower()
     for n in range(min(max_words, len(words)), min_words - 1, -1):
         tail = " ".join(words[-n:]).lower()
         if low.startswith(tail):
@@ -48,9 +53,9 @@ def normalise(raw, before, after=""):
     and `after` (the rest of the line when dictating mid-line)."""
     # Precomposed: achat refuses combining marks, and backspace counts are
     # per character on every target.
-    text = unicodedata.normalize("NFC", " ".join((raw or "").split()))
-    text = strip_echo(text, before).strip()
-    if not any(ch.isalnum() for ch in text):
+    text = unicodedata.normalize("NFC", _collapse(raw))
+    text = strip_echo(text, before).strip(" ")
+    if not any(ch.isalnum() or ch == "\n" for ch in text):
         return ""
     stripped = before.rstrip()
     mid_sentence = stripped and not stripped.endswith(SENTENCE_END) and not before.endswith("\n")
@@ -61,7 +66,7 @@ def normalise(raw, before, after=""):
             low = text[0].lower()
             if len(low) == 1:  # "İ".lower() grows a combining mark
                 text = low + text[1:]
-    if before and not before.endswith((" ", "\n")):
+    if before and not before.endswith((" ", "\n")) and not text.startswith("\n"):
         text = " " + text
     if after[:1].isalnum():
         # Mid-sentence: an utterance-final full stop would split the sentence.

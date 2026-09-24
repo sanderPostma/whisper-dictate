@@ -69,6 +69,24 @@ class ParseCommandTests(unittest.TestCase):
         for text in ("No, scratch that.", "Okay, scratch that.", "Oh no, scratch that", "Um, scratch that."):
             self.assertEqual(parse_command(text), Command(scratch=True), text)
 
+    def test_press_enter_at_the_end(self):
+        self.assertEqual(parse_command("/compact, press enter."), Command(rest="/compact", enter=True))
+        self.assertEqual(parse_command("slash compact press enter"),
+                         Command(rest="slash compact", enter=True))
+        self.assertEqual(parse_command("Run it. Press return."), Command(rest="Run it.", enter=True))
+
+    def test_enter_alone(self):
+        self.assertEqual(parse_command("Enter."), Command(enter=True))
+        self.assertEqual(parse_command("Press enter."), Command(enter=True))
+
+    def test_enter_as_a_word_is_text(self):
+        for text in ("Enter is not working.", "Now enter the room", "the center", "enter"[:0] + "we enter"):
+            self.assertIsNone(parse_command(text), text)
+
+    def test_period_then_press_enter(self):
+        self.assertEqual(parse_command("Test more. Period. Press enter."),
+                         Command(rest="Test more", end=".", enter=True))
+
     def test_scratch_that_mid_chunk_is_text(self):
         self.assertIsNone(parse_command("scratch that itch"))
 

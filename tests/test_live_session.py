@@ -48,7 +48,7 @@ class NormaliseTests(unittest.TestCase):
         self.assertEqual(normalise("  . ", "x"), "")
 
     def test_collapses_whitespace(self):
-        self.assertEqual(normalise("a   b\n c", ""), "a b c")
+        self.assertEqual(normalise("a   b\t c", ""), "a b c")
 
     def test_strip_echo_removes_repeated_context(self):
         self.assertEqual(
@@ -77,6 +77,10 @@ class NormaliseTests(unittest.TestCase):
     def test_strip_echo_ignores_short_overlap(self):
         self.assertEqual(strip_echo("the branch", "merge the branch"), "the branch")
 
+
+    def test_newlines_survive(self):
+        # "new line" -> "\n" comes from the replacements; it must not become a space.
+        self.assertEqual(normalise("first line\n second  line", ""), "first line\nsecond line")
 
     def test_decomposed_accents_are_precomposed(self):
         # achat refuses combining marks, and every target counts characters.

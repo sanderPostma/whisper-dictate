@@ -47,24 +47,9 @@ replacements:
   "pipe": "|"
   "tilde": "~"
   
-  # Terminal/keyboard actions (with punctuation cleanup)
+  # Line breaks. "press enter" / "enter" said alone are handled in code (they press
+  # the Enter key), so they are not replacements: "enter" would also match "center".
   # Order matters - match longer patterns first
-  ", enter.": "\n"
-  ", enter,": "\n"
-  ", enter": "\n"
-  ",enter.": "\n"
-  ",enter": "\n"
-  " enter.": "\n"
-  " enter,": "\n"
-  " enter": "\n"
-  "enter.": "\n"
-  "enter,": "\n"
-  "enter": "\n"
-  ", press enter.": "\n"
-  ", press enter": "\n"
-  " press enter.": "\n"
-  " press enter": "\n"
-  "press enter": "\n"
   ", new line.": "\n"
   " new line.": "\n"
   "new line": "\n"

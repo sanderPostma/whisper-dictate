@@ -61,6 +61,10 @@ Or with options:
 - **Model** - Whisper, distil-whisper, or Qwen3-ASR 1.7B
 - **Settings** - Open config file
 
+Pressing Enter by voice works in one-shot and live mode: end with "press enter" (or
+"press return"), or say "enter" on its own. A bare "enter" inside a sentence stays text.
+"new line" / "new paragraph" insert line breaks through the replacements file.
+
 ## Live dictation
 
 Press the dictation hotkey (`<Alt>d`) twice within a second (double beep), or pick
@@ -96,6 +100,7 @@ Spoken repairs, for when a thinking pause put a full stop in the middle of a sen
 | "… period" / "full stop" / "question mark" / "exclamation mark" | end of a chunk | join it to the previous chunk (the stray `.` goes, lowercase) and end it so |
 | "comma …" | start of a chunk | the previous `.` becomes `,` and the chunk continues the sentence |
 | "scratch that" | end of a chunk | delete the current sentence (or the one just finished) |
+| "… press enter" / "press return", or "enter" said alone | end of a chunk | type the words, then press Enter (submit) |
 
 Say the command words as their own piece, with a short pause before them ("… test more —
 period"): "period", "full stop" and "comma" are ordinary words too, so "the trial period"
