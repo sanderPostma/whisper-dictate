@@ -16,8 +16,6 @@ import time
 
 from live_output import wezterm_focused_pane, xdotool_active_window
 
-# Rejections meaning the operator (or a nudge) touched the line.
-_LINE_MOVED = ("conflict", "cursor_not_at_end", "unknown_line")
 BUSY_RETRIES = 8
 BUSY_BACKOFF_S = 0.25
 
@@ -117,6 +115,16 @@ def wezterm_pane_tty(pane_id, run=subprocess.run):
 def _clean_insert(text):
     """The socket refuses control bytes; keep lengths so the session stays in sync."""
     return "".join(" " if ord(c) < 0x20 or ord(c) == 0x7F else c for c in text)
+
+
+def _respace(insert, before, after):
+    """Redo the spacing of text shaped for another cursor position."""
+    core = insert.strip(" ")
+    if before and not before.endswith((" ", "\n")):
+        core = " " + core
+    if after[:1].isalnum():
+        core += " "
+    return core
 
 
 class AchatTarget:
@@ -224,16 +232,17 @@ class AchatTarget:
         # a refused append loses the words unless the retry below lands them.
         self.last_send_dropped = edit.backspace == 0
         state = None
-        if resp.get("error") in _LINE_MOVED and edit.backspace == 0:
+        # cursor_not_at_end only comes from achat builds without at_cursor,
+        # where a retry at the cursor would be refused the same way.
+        if resp.get("error") in ("conflict", "unknown_line") and edit.backspace == 0:
             state = self._refresh()
         if state is not None:
             # Appending after the operator's text is fine (backspacing over it
             # never is). Still report False: the window now ends in our text
             # but a correction must not reach back past theirs. The window is
             # committed, so the spacing can follow the real line.
-            before = (state.get("text") or "")[:state["cursor"]]
-            if before.endswith((" ", "\n")):
-                insert = insert.lstrip(" ")
+            text = state.get("text") or ""
+            insert = _respace(insert, text[:state["cursor"]], text[state["cursor"]:])
             resp = self._edit(0, insert)
             if resp is not None and resp.get("ok"):
                 self.last_send_dropped = False

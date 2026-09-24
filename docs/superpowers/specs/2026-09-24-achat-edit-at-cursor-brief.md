@@ -49,7 +49,10 @@ refused (`busy`) while that is in flight.
 ## Docs
 
 `docs/operator-guide.md`, "The input-control socket": describe `at_cursor` and the new
-`range` rule, with one example like the one above.
+`range` rule, with one example like the one above. Also update the "cursor sits at the end"
+wording in the `edit` paragraph and the error table's `cursor_not_at_end` row ("an `edit`
+only ever appends"), and state that `cursor` in `state` counts characters (code points,
+like `Line`'s `Vec<char>`): the client now splits `text` at it.
 
 ## Out of scope
 

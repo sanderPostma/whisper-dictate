@@ -301,6 +301,16 @@ class LineContextTests(unittest.TestCase):
         self.assertEqual(target.edits, [Edit(0, "quick "), Edit(0, "brown ")])
         self.assertEqual(fast.prompts, ["His is a", "His is a quick"])
 
+    def test_after_text_cleared_when_focus_moves_to_plain_target(self):
+        plain = FakeTarget()
+        target = LineTextTarget("His is a ", after="test.")
+        ctl = LiveController(LiveSession(), target, Script("quick", "more"), None,
+                             make_target=lambda: plain, log=lambda *_: None)
+        ctl.process(chunk(0.0, 1.0))
+        target.focused = False
+        ctl.process(chunk(1.0, 2.0))
+        self.assertEqual(plain.edits, [Edit(0, "more")])
+
     def test_line_not_reread_mid_window(self):
         target = LineTextTarget("")
         ctl = self.make(Script("Hello", "there"), target)

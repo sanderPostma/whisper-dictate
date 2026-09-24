@@ -242,7 +242,26 @@ class SendTests(unittest.TestCase):
         target(achat).send(Edit(0, " quick "))
         self.assertEqual(achat.requests[2]["insert"], "quick ")
 
-    def test_correction_never_backspaces_over_operator_text(self):
+    def test_retry_respaces_for_the_new_cursor_position(self):
+        # Built for "a |test" but the cursor moved to "widget|, x".
+        achat = FakeAchat(
+            {"ok": False, "error": "conflict", "rev": 12},
+            {"ok": True, "rev": 12, "known": True, "text": "widget, x", "cursor": 6},
+            {"ok": True, "rev": 15},
+        )
+        target(achat).send(Edit(0, "quick "))
+        self.assertEqual(achat.requests[2]["insert"], " quick")
+
+    def test_retry_adds_space_before_a_following_word(self):
+        achat = FakeAchat(
+            {"ok": False, "error": "conflict", "rev": 12},
+            {"ok": True, "rev": 12, "known": True, "text": "a bar", "cursor": 2},
+            {"ok": True, "rev": 15},
+        )
+        target(achat).send(Edit(0, "quick"))
+        self.assertEqual(achat.requests[2]["insert"], "quick ")
+
+
         achat = FakeAchat({"ok": False, "error": "conflict", "rev": 12})
         t = target(achat)
         self.assertFalse(t.send(Edit(3, "abc")))

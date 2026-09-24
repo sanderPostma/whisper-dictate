@@ -80,8 +80,14 @@ class NormaliseTests(unittest.TestCase):
     def test_punctuation_after_the_cursor_gets_no_space(self):
         self.assertEqual(normalise("quick", "His is a", ", test"), " quick")
 
+    def test_final_full_stop_dropped_before_a_following_word(self):
+        self.assertEqual(normalise("Quick.", "His is a ", "test sentence."), "quick ")
+
+    def test_final_full_stop_kept_at_end_of_line(self):
+        self.assertEqual(normalise("Done.", "", ""), "Done.")
 
 
+class FastResultTests(unittest.TestCase):
     def test_fast_result_is_append_edit(self):
         s = LiveSession()
         s.add_chunk(audio(1), 0.0, 1.0)
@@ -214,7 +220,7 @@ class CommitTests(unittest.TestCase):
         self.assertEqual(s.add_fast_result(1.0, "x"), Edit(0, "x "))
 
 
-
+class PromptTests(unittest.TestCase):
     def test_fast_prompt_has_base_committed_and_window(self):
         s = session_with([(0.0, 1.0, "One.")], base_prompt="Vocabulary: git")
         s.commit()

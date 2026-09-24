@@ -52,7 +52,8 @@ def normalise(raw, before, after=""):
     if before and not before.endswith((" ", "\n")):
         text = " " + text
     if after[:1].isalnum():
-        text += " "
+        # Mid-sentence: an utterance-final full stop would split the sentence.
+        text = text.rstrip(".?!") + " "
     return unicodedata.normalize("NFC", text)
 
 

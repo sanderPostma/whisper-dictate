@@ -153,6 +153,9 @@ class LiveController:
     def _retarget(self):
         """Focus moved: freeze the window and follow the new focus, append-only."""
         self.session.commit()
+        # The old line's text after the cursor means nothing in the new place;
+        # a target that knows its line sets it again at the next window.
+        self.session.after_text = ""
         if self.make_target is not None:
             new = self.make_target()
             if new is not None:
