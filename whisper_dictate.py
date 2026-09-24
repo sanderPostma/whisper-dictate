@@ -40,6 +40,10 @@ from asr_models import (
     multilingual_model,
 )
 from asr_qwen import load_qwen, transcribe_qwen
+from live_controller import LiveController, select_transcribers
+from live_output import choose_target
+from live_segmenter import LiveSegmenter
+from live_session import LiveSession
 
 # Optional: transformers for distil-whisper models
 try:
@@ -82,6 +86,14 @@ DEFAULT_CONFIG = {
     "context_prompt": "",
     "record_timeout_ms": 60000,  # auto-stop after this; hold Alt to extend
     "transcribe_chunk_seconds": 25,
+    "live_hotkey": "<Alt><Shift>d",
+    "live_pause_ms": 600,
+    "live_max_chunk_s": 8,
+    "live_window_max_s": 12,
+    "live_commit_pause_ms": 1200,
+    "live_max_backspace": 80,
+    "live_corrections": True,
+    "live_committed_context_chars": 400,
     "remote_server": {
         "enabled": False,
         "host": "192.168.1.100",
@@ -440,6 +452,9 @@ class WhisperDictate:
     
     def _toggle_recording_impl(self):
         """Actual toggle implementation (runs in main thread)."""
+        if getattr(self, "live_active", False):
+            self.notify("Live dictation is running; stop it first.")
+            return False
         if self.recording:
             self.stop_recording()
         else:
@@ -664,7 +679,7 @@ class WhisperDictate:
             if self.remote_monitor_stop.wait(interval):
                 return
 
-    def transcribe_remote(self, audio, timeout=60):
+    def transcribe_remote(self, audio, timeout=60, prompt=None):
         """Transcribe audio by sending it to a remote Whisper server."""
         remote_config = self.get_remote_config()
 
@@ -676,7 +691,7 @@ class WhisperDictate:
             model=self.get_remote_model(),
             sample_rate=self.config.get("sample_rate", 16000),
             audio_size=len(audio_bytes),
-            prompt=self.get_asr_context(),
+            prompt=self.get_asr_context() if prompt is None else prompt,
         )
         header_bytes = json.dumps(header).encode("utf-8")
 
@@ -698,13 +713,14 @@ class WhisperDictate:
             print(f"[whisper-dictate] Remote transcription took {elapsed:.2f}s")
         return response.get("text", "").strip()
 
-    def _transcribe_local(self, audio, model_name=None):
+    def _transcribe_local(self, audio, model_name=None, prompt=None):
         """Transcribe audio using the local model."""
         if model_name is None:
             model_name = self.config.get("model", "base")
         self.load_model(model_name=model_name)
         start_time = time.time()
-        prompt = self.get_asr_context()
+        if prompt is None:
+            prompt = self.get_asr_context()
         backend = getattr(self, '_model_backend', 'whisper')
 
         if backend == 'qwen':
@@ -785,6 +801,120 @@ class WhisperDictate:
         # Output based on mode
         GLib.idle_add(lambda: self.output_text(text))
     
+    def toggle_live(self, *args):
+        """Toggle live dictation (type at pauses, correct recent words)."""
+        self.saved_window = self.get_focused_window()
+        GLib.idle_add(self._toggle_live_impl)
+
+    def _toggle_live_impl(self):
+        if getattr(self, "live_active", False):
+            self.stop_live()
+        else:
+            self.start_live()
+        return False
+
+    def _live_transcribers(self):
+        """(fast, correct) transcribers for a live session; correct may be None."""
+        model = self.config.get("model", "base")
+        fallback_model = self.get_cpu_fallback_model()
+
+        def remote(audio, prompt):
+            return self.transcribe_remote(audio, timeout=10, prompt=prompt)
+
+        def local(audio, prompt):
+            return self._transcribe_local(audio, model_name=model, prompt=prompt)
+
+        def local_fallback(audio, prompt):
+            return self._transcribe_local(audio, model_name=fallback_model, prompt=prompt)
+
+        def remote_is_down():
+            with self.remote_state_lock:
+                return self.remote_available is False
+
+        return select_transcribers(
+            self.get_remote_config().get("enabled", False),
+            remote_is_down, remote, local, local_fallback,
+            lambda ok, reason: self.set_remote_available(ok, reason),
+        )
+
+    def start_live(self):
+        if self.recording or getattr(self, "transcribe_active", False):
+            self.notify("Stop the current recording before starting live dictation.")
+            return
+        previous = getattr(self, "live_controller", None)
+        if previous is not None and previous.is_running():
+            self.notify("Live dictation is still finishing; try again in a moment.")
+            return
+        target = choose_target(self.get_focused_window_class())
+        if target is None:
+            self.notify("Live dictation: no focused window found.")
+            return
+        cfg = self.config
+        sample_rate = cfg["sample_rate"]
+        segmenter = LiveSegmenter(
+            sample_rate,
+            pause_ms=int(cfg.get("live_pause_ms", 600)),
+            max_chunk_s=float(cfg.get("live_max_chunk_s", 8)),
+            threshold=float(cfg.get("silence_threshold", 0.0)),
+            long_pause_ms=int(cfg.get("live_commit_pause_ms", 1200)),
+        )
+        session = LiveSession(
+            base_prompt=self.get_asr_context(),
+            context_chars=int(cfg.get("live_committed_context_chars", 400)),
+            max_backspace=int(cfg.get("live_max_backspace", 80)),
+            window_max_s=float(cfg.get("live_window_max_s", 12)),
+        )
+        fast, correct = self._live_transcribers()
+        if not cfg.get("live_corrections", True):
+            correct = None
+        controller = LiveController(
+            session, target, fast, correct,
+            make_target=lambda: choose_target(self.get_focused_window_class()),
+            postprocess=self.apply_replacements,
+            on_error=lambda msg: GLib.idle_add(lambda: self.notify(msg) or False),
+            on_done=lambda: GLib.idle_add(self._live_done),
+        )
+        controller.start()
+
+        def audio_callback(indata, frames, time_info, status):
+            for event in segmenter.feed(indata[:, 0]):
+                controller.submit(event)
+
+        self.live_segmenter = segmenter
+        self.live_controller = controller
+        self.live_stream = sd.InputStream(
+            samplerate=sample_rate, channels=1, dtype=np.float32,
+            blocksize=int(sample_rate * 0.05), callback=audio_callback,
+        )
+        self.live_stream.start()
+        self.live_active = True
+        self.beep_start()
+        self.update_icon(True)
+        suffix = "" if correct else " (no corrections)"
+        self.update_status(f"⚡ Live → {target.name}{suffix}")
+        print(f"[whisper-dictate] Live dictation started: {target.name}, corrections={correct is not None}")
+        GLib.timeout_add(50, lambda: self.restore_focus(getattr(self, 'saved_window', None)) or False)
+
+    def stop_live(self):
+        if not getattr(self, "live_active", False):
+            return
+        self.live_active = False
+        if self.live_stream:
+            self.live_stream.stop()
+            self.live_stream.close()
+            self.live_stream = None
+        for event in self.live_segmenter.flush():
+            self.live_controller.submit(event)
+        self.live_controller.stop()
+        self.update_status("Finishing live dictation...")
+
+    def _live_done(self):
+        self.beep_stop()
+        self.update_icon(False)
+        self.update_status("Ready")
+        print("[whisper-dictate] Live dictation stopped")
+        return False
+
     def get_focused_window_class(self):
         """Return the WM_CLASS of the focused window, or None."""
         try:
@@ -826,7 +956,7 @@ class WhisperDictate:
 
     def start_transcribe_session(self):
         """Start mic+speakers transcription, chunked, streamed to a tempfile."""
-        if getattr(self, "transcribe_active", False) or self.recording:
+        if getattr(self, "transcribe_active", False) or self.recording or getattr(self, "live_active", False):
             return False
 
         monitor = self._get_monitor_source()
@@ -1259,6 +1389,11 @@ class WhisperDictate:
         transcribe_session_item.connect("activate", self.toggle_transcribe_session)
         menu.append(transcribe_session_item)
         self.transcribe_session_item = transcribe_session_item
+
+        # Live dictation: type at pauses, correct recent words
+        live_item = Gtk.MenuItem(label="⚡ Live dictation")
+        live_item.connect("activate", self.toggle_live)
+        menu.append(live_item)
 
         menu.append(Gtk.SeparatorMenuItem())
         
@@ -1763,7 +1898,14 @@ class WhisperDictate:
             print(f"✓ Hotkey {hotkey} registered")
         else:
             print(f"✗ Failed to register hotkey {hotkey}")
-        
+
+        live_hotkey = self.config.get("live_hotkey", "<Alt><Shift>d")
+        if live_hotkey:
+            if Keybinder.bind(live_hotkey, lambda _keystring: self.toggle_live()):
+                print(f"✓ Live hotkey {live_hotkey} registered")
+            else:
+                print(f"✗ Failed to register live hotkey {live_hotkey}")
+
         # Create indicator
         if HAS_APPINDICATOR:
             self.indicator = appindicator.Indicator.new(
@@ -1790,6 +1932,8 @@ class WhisperDictate:
         
         # Cleanup
         Keybinder.unbind(hotkey)
+        if live_hotkey:
+            Keybinder.unbind(live_hotkey)
 
 
 def main():

@@ -61,6 +61,23 @@ Or with options:
 - **Model** - Whisper, distil-whisper, or Qwen3-ASR 1.7B
 - **Settings** - Open config file
 
+## Live dictation
+
+Press `<Alt><Shift>d` (config `live_hotkey`) or pick **⚡ Live dictation** in the tray,
+then talk. Text is typed at each pause (~0.6 s). With the remote server up, the last
+≤ 12 s are re-transcribed after each pause and recently typed words are corrected in
+place (backspace + retype). Press the hotkey again to stop.
+
+- WezTerm: typed into the pane focused at start via `wezterm cli send-text`.
+- Other windows: `xdotool`.
+- Switching window or pane mid-session freezes what was typed and continues in the
+  new place, append-only.
+- The local fallback model types but does not correct.
+
+Config keys: `live_pause_ms`, `live_max_chunk_s`, `live_window_max_s`,
+`live_commit_pause_ms`, `live_max_backspace`, `live_corrections`,
+`live_committed_context_chars`, `live_hotkey`.
+
 ## Configuration
 
 ### Main Config
