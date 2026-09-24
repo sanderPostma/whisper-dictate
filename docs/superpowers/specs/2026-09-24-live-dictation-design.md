@@ -112,9 +112,10 @@ Interface: `send(edit) -> bool`, `still_focused() -> bool`.
 ## Phase 2 (separate repo, in progress by another agent)
 `achat run` gains a cursor-aware line model and a per-session input-control socket with a
 compare-and-swap `edit` op — see `2026-09-24-achat-input-control-brief.md`.
-whisper-dictate then adds `AchatTarget`: discover socket by `wezterm_pane`, send fast
-chunks as `edit` with `expect_rev`, and on `conflict`/`unknown_line` commit the window.
-Preferred over `WezTermTarget` when a socket for the focused pane exists.
+whisper-dictate then adds `AchatTarget`: discover socket by matching the sidecar's `tty` to
+the WezTerm pane's `tty_name` (because `wezterm_pane` is inherited by nested sessions); send
+fast chunks as `edit` with `expect_rev`, and on `conflict`/`unknown_line` commit the window
+while corrections continue. Preferred over `WezTermTarget` when a socket for the focused pane exists.
 
 ## Later (out of scope)
 Voice commands ("command clear line", "cursor before current word") — built on the

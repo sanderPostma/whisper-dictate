@@ -129,6 +129,24 @@ class DiscoveryTests(unittest.TestCase):
         self.assertIsNone(AchatTarget.detect(desktop(), input_dir=self.dir, request=achat,
                                              pid_alive=lambda pid: True))
 
+    def test_detect_returns_none_when_state_has_no_rev(self):
+        sock = self.sidecar(100, "/dev/pts/4")
+        achat = FakeAchat({"ok": True, "known": True, "text": "", "cursor": 0})
+        self.assertIsNone(AchatTarget.detect(desktop(), input_dir=self.dir, request=achat,
+                                             pid_alive=lambda pid: True))
+
+    def test_detect_returns_none_when_rev_is_null(self):
+        sock = self.sidecar(100, "/dev/pts/4")
+        achat = FakeAchat({"ok": True, "rev": None, "known": True, "text": "", "cursor": 0})
+        self.assertIsNone(AchatTarget.detect(desktop(), input_dir=self.dir, request=achat,
+                                             pid_alive=lambda pid: True))
+
+    def test_detect_returns_none_when_rev_is_bool(self):
+        sock = self.sidecar(100, "/dev/pts/4")
+        achat = FakeAchat({"ok": True, "rev": True, "known": True, "text": "", "cursor": 0})
+        self.assertIsNone(AchatTarget.detect(desktop(), input_dir=self.dir, request=achat,
+                                             pid_alive=lambda pid: True))
+
 
 class SendTests(unittest.TestCase):
     def test_edit_is_compare_and_swap_and_tracks_rev(self):
@@ -207,6 +225,41 @@ class SendTests(unittest.TestCase):
 
     def test_rejections_are_recoverable(self):
         self.assertTrue(AchatTarget.recoverable_rejections)
+
+    def test_success_reply_without_rev_returns_false_and_marks_dead(self):
+        achat = FakeAchat({"ok": True})  # Missing rev
+        t = target(achat)
+        self.assertFalse(t.send(Edit(0, "abc")))
+        self.assertTrue(t.dead)
+        self.assertFalse(t.still_focused())
+
+    def test_success_reply_with_null_rev_returns_false_and_marks_dead(self):
+        achat = FakeAchat({"ok": True, "rev": None})
+        t = target(achat)
+        self.assertFalse(t.send(Edit(0, "abc")))
+        self.assertTrue(t.dead)
+
+    def test_success_reply_with_bool_rev_returns_false_and_marks_dead(self):
+        achat = FakeAchat({"ok": True, "rev": True})
+        t = target(achat)
+        self.assertFalse(t.send(Edit(0, "abc")))
+        self.assertTrue(t.dead)
+
+    def test_conflict_reply_with_null_rev_leaves_rev_unchanged(self):
+        achat = FakeAchat({"ok": False, "error": "conflict", "rev": None})
+        t = target(achat)
+        t.send(Edit(3, "abc"))
+        self.assertEqual(t.rev, 10)  # unchanged
+
+    def test_append_retry_without_rev_marks_dead(self):
+        achat = FakeAchat(
+            {"ok": False, "error": "conflict", "rev": 12},
+            {"ok": True, "rev": 12, "known": True, "text": "hi", "cursor": 2},
+            {"ok": True},  # Missing rev in append retry
+        )
+        t = target(achat)
+        self.assertFalse(t.send(Edit(0, " two")))
+        self.assertTrue(t.dead)
 
 
 class ChooseTargetTests(unittest.TestCase):

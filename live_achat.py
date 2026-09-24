@@ -22,6 +22,14 @@ BUSY_RETRIES = 8
 BUSY_BACKOFF_S = 0.25
 
 
+def _rev(value):
+    """Extract rev if it's a valid integer (not bool), else None.
+
+    achat treats null rev as 'skip the check', which disables the guard.
+    """
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 def achat_input_dir(env=None):
     """Directory holding `<pid>.sock` / `<pid>.json`, as `achat run` picks it."""
     env = os.environ if env is None else env
@@ -148,7 +156,10 @@ class AchatTarget:
             return None
         if not state.get("ok"):
             return None
-        return cls(pane, window, sock, state.get("rev"), run, request, **kwargs)
+        rev = _rev(state.get("rev"))
+        if rev is None:
+            return None
+        return cls(pane, window, sock, rev, run, request, **kwargs)
 
     def _call(self, payload):
         try:
@@ -173,7 +184,10 @@ class AchatTarget:
         state = self._call({"op": "state"})
         if not state or not state.get("ok"):
             return None
-        self.rev = state.get("rev")
+        rev = _rev(state.get("rev"))
+        if rev is None:
+            return None
+        self.rev = rev
         text = state.get("text") or ""
         if state.get("known") and state.get("cursor") == len(text):
             return state
@@ -189,18 +203,30 @@ class AchatTarget:
         if resp is None:
             return False
         if resp.get("ok"):
-            self.rev = resp.get("rev")
+            rev = _rev(resp.get("rev"))
+            if rev is None:
+                self._log("[live] achat reply without rev")
+                self.dead = True
+                return False
+            self.rev = rev
             return True
         self._log(f"[live] achat edit rejected: {resp.get('error')}")
         if "rev" in resp:
-            self.rev = resp["rev"]
+            rev = _rev(resp["rev"])
+            if rev is not None:
+                self.rev = rev
         if resp.get("error") in _LINE_MOVED and edit.backspace == 0 and self._refresh():
             # Appending after the operator's text is fine (backspacing over it
             # never is). Still report False: the window now ends in our text
             # but a correction must not reach back past theirs.
             resp = self._edit(0, insert)
             if resp is not None and resp.get("ok"):
-                self.rev = resp.get("rev")
+                rev = _rev(resp.get("rev"))
+                if rev is not None:
+                    self.rev = rev
+                else:
+                    self._log("[live] achat reply without rev")
+                    self.dead = True
         return False
 
     def still_focused(self):
