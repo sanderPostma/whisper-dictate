@@ -163,7 +163,11 @@ class LiveController:
         line_text = getattr(self.target, "line_text", None)
         if line_text is None:
             return
-        text = line_text()
+        try:
+            text = line_text()
+        except Exception as e:
+            self.log(f"[live] could not read the target line: {e}")
+            return
         if text is not None:
             self.session.set_context(text)
 
@@ -177,8 +181,8 @@ class LiveController:
         if getattr(self.target, "recoverable_rejections", False):
             self.log("[live] edit rejected; committing window")
             if getattr(self.target, "last_send_dropped", False):
-                self._report("Live dictation: some words were not typed; "
-                             "the prompt line was being edited.")
+                self._report("Live dictation: some words could not be typed "
+                             "into the prompt line.")
         else:
             self.log("[live] output failed; committing window and disabling corrections")
             self.corrections_enabled = False

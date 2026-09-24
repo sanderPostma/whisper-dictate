@@ -45,10 +45,12 @@ def normalise(raw, before):
         first = text.split(" ", 1)[0].rstrip(",.?!;:")
         acronym = len(first) > 1 and first.isupper()
         if first not in _KEEP_CASE and not acronym and first[:1].isupper():
-            text = text[0].lower() + text[1:]
+            low = text[0].lower()
+            if len(low) == 1:  # "İ".lower() grows a combining mark
+                text = low + text[1:]
     if before and not before.endswith((" ", "\n")):
         text = " " + text
-    return text
+    return unicodedata.normalize("NFC", text)
 
 
 def _common_prefix(a, b):

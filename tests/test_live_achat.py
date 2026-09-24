@@ -153,6 +153,17 @@ class SendTests(unittest.TestCase):
         achat = FakeAchat({"ok": True, "rev": 4, "known": True, "text": "fix the", "cursor": 7})
         self.assertEqual(target(achat).line_text(), "fix the")
 
+    def test_line_text_adopts_current_rev(self):
+        # After a submitted prompt the first append must not hit a stale rev.
+        achat = FakeAchat({"ok": True, "rev": 40, "known": True, "text": "", "cursor": 0})
+        t = target(achat)
+        t.line_text()
+        self.assertEqual(t.rev, 40)
+
+    def test_line_text_ignores_bad_reply(self):
+        t = target(FakeAchat(["not", "a", "dict"]))
+        self.assertIsNone(t.line_text())
+
     def test_line_text_none_when_unknown_or_cursor_moved(self):
         achat = FakeAchat({"ok": True, "rev": 4, "known": False, "text": "", "cursor": 0},
                           {"ok": True, "rev": 4, "known": True, "text": "fix", "cursor": 1})

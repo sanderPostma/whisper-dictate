@@ -65,6 +65,12 @@ class NormaliseTests(unittest.TestCase):
         self.assertEqual(normalise("cafe\u0301", ""), "caf\u00e9")
 
 
+    def test_lowercasing_stays_precomposed(self):
+        # "\u0130".lower() is "i" plus a combining dot, which achat refuses.
+        text = normalise("\u0130stanbul", "we flew to")
+        self.assertFalse(any(0x0300 <= ord(c) <= 0x036F for c in text))
+
+
 class FastResultTests(unittest.TestCase):
     def test_fast_result_is_append_edit(self):
         s = LiveSession()

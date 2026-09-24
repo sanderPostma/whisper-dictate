@@ -305,6 +305,15 @@ class LineContextTests(unittest.TestCase):
         ctl.process(chunk(0.0, 1.0))
         self.assertEqual(target.edits, [Edit(0, "Hello")])
 
+    def test_line_text_failure_keeps_the_chunk(self):
+        class Broken(LineTextTarget):
+            def line_text(self):
+                raise RuntimeError("boom")
+        target = Broken("")
+        ctl = self.make(Script("Hello"), target)
+        ctl.process(chunk(0.0, 1.0))
+        self.assertEqual(target.edits, [Edit(0, "Hello")])
+
     def test_dropped_text_is_reported_once(self):
         target = LineTextTarget("", ok=False)
         target.recoverable_rejections = True

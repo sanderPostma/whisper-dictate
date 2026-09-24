@@ -245,10 +245,18 @@ class AchatTarget:
     def line_text(self):
         """Text on the prompt line when an append would land after it, else None."""
         state = self._call({"op": "state"})
-        if not state or not state.get("ok") or not state.get("known"):
+        if not isinstance(state, dict) or not state.get("ok") or not state.get("known"):
             return None
         text = state.get("text") or ""
-        return text if state.get("cursor") == len(text) else None
+        if state.get("cursor") != len(text):
+            return None
+        # Called with an empty window: later backspaces only cover text typed
+        # after this revision, so adopting it is safe and avoids a stale-rev
+        # conflict on the first append after the operator submitted a prompt.
+        rev = _rev(state.get("rev"))
+        if rev is not None:
+            self.rev = rev
+        return text
 
     def still_focused(self):
         if self.dead:
