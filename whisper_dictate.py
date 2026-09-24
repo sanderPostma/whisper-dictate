@@ -382,6 +382,17 @@ class WhisperDictate:
             model_name = self.config.get("model", "base")
         return is_distil_model(model_name)
     
+    def preload_model_name(self):
+        """The model a local transcription would actually use right now."""
+        if self.get_remote_config().get("enabled", False):
+            return self.get_cpu_fallback_model()
+        return self.config.get("model", "base")
+
+    def preload_model(self):
+        """Load the locally needed model in the background."""
+        threading.Thread(target=self.load_model, args=(self.preload_model_name(),),
+                         daemon=True).start()
+
     def load_model(self, model_name=None):
         """Load Whisper model (lazy loading)."""
         if model_name is None:
@@ -1638,7 +1649,7 @@ class WhisperDictate:
                         f"{self.config.get('language')}."
                     )
                 # Preload new model in background
-                threading.Thread(target=self.load_model, daemon=True).start()
+                self.preload_model()
 
     def on_language_changed(self, item, lang_code):
         """Handle language selection change."""
@@ -1661,7 +1672,7 @@ class WhisperDictate:
         print(f"[whisper-dictate] Language changed to: {lang_code}")
         if old_model != self.config.get("model", "base"):
             self.model = None  # Force reload
-            threading.Thread(target=self.load_model, daemon=True).start()
+            self.preload_model()
         if model_changes:
             msg = "Adjusted non-English model config: " + ", ".join(model_changes)
             print(f"[whisper-dictate] {msg}")
@@ -1956,7 +1967,7 @@ class WhisperDictate:
         print(f"Click tray icon or press hotkey to record")
         
         # Preload model in background
-        threading.Thread(target=self.load_model, daemon=True).start()
+        self.preload_model()
         
         # Start remote monitor when enabled
         if self.get_remote_config().get("enabled", False):
