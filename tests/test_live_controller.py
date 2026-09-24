@@ -470,6 +470,20 @@ class CommandSafetyTests(unittest.TestCase):
         self.assertEqual(len(target.edits), 1)
 
 
+class KeystrokeLongPauseTests(unittest.TestCase):
+    def test_long_pause_closes_the_window_on_a_target_without_line(self):
+        # Re-review: "hello world" (no full stop), long pause, "scratch that"
+        # backspaced at wherever the operator's cursor had moved to.
+        target = FakeTarget()
+        ctl = LiveController(LiveSession(), target, Script("hello world", "Scratch that."), None,
+                             log=lambda *_: None)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(LongPause(2.5))
+        self.assertEqual(ctl.session.chunk_count, 0)
+        ctl.process(chunk(5.0, 6.0))
+        self.assertEqual(len(target.edits), 1)
+
+
 class SelectTranscribersTests(unittest.TestCase):
     def setUp(self):
         self.down = False

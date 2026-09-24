@@ -65,6 +65,10 @@ class ParseCommandTests(unittest.TestCase):
         self.assertTrue(mentions_command("Done. Scratch that. Next"))
         self.assertFalse(mentions_command("We extended the trial period and the comma rule"))
 
+    def test_filler_before_scratch_that_counts_as_nothing(self):
+        for text in ("No, scratch that.", "Okay, scratch that.", "Oh no, scratch that", "Um, scratch that."):
+            self.assertEqual(parse_command(text), Command(scratch=True), text)
+
     def test_scratch_that_mid_chunk_is_text(self):
         self.assertIsNone(parse_command("scratch that itch"))
 

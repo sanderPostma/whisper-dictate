@@ -104,7 +104,14 @@ class LiveController:
         if isinstance(event, ChunkReady):
             self._handle_chunk(event)
         elif isinstance(event, LongPause):
-            if self.session.should_commit(long_pause=True):
+            if getattr(self.target, "line_context", None) is None and self.session.chunk_count:
+                # No way to see the line: the operator may type or click
+                # anywhere during a long pause, so nothing typed before it
+                # may be backspaced after it.
+                self.log("[live] commit: long pause (target line not readable)")
+                self.session.commit()
+                self.session.forget_history()
+            elif self.session.should_commit(long_pause=True):
                 self.log("[live] commit: long pause after sentence end")
                 self.session.commit()
 
