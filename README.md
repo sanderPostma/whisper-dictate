@@ -97,10 +97,16 @@ Spoken repairs, for when a thinking pause put a full stop in the middle of a sen
 | "comma …" | start of a chunk | the previous `.` becomes `,` and the chunk continues the sentence |
 | "scratch that" | end of a chunk | delete the current sentence (or the one just finished) |
 
+Say the command words as their own piece, with a short pause before them ("… test more —
+period"): "period", "full stop" and "comma" are ordinary words too, so "the trial period"
+or "comma separated values" stay text. "Scratch that" only deletes text that was typed;
+words spoken just before it in the same breath are simply dropped.
+
 Repairs only ever rewrite what live dictation typed itself, up to
-`live_max_command_backspace` characters. In achat prompts the line must still end with
-exactly that text; elsewhere focus must not have moved. A trailing "period" is always a
-command, so "the trial period" at the very end of a chunk ends the sentence instead.
+`live_max_command_backspace` characters: in achat prompts the line must still end with
+exactly that text; in other WezTerm panes the cursor row must still show it; in other
+windows (xdotool) a repair only reaches back within the current correction window, since
+you may have typed elsewhere during a pause.
 
 Config keys: `live_pause_ms`, `live_max_chunk_s`, `live_window_max_s`,
 `live_commit_pause_ms`, `live_max_backspace`, `live_max_command_backspace`, `live_corrections`,

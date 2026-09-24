@@ -173,23 +173,28 @@ class LiveSession:
     def apply_command(self, command):
         """Apply a spoken repair (see live_commands) as one edit over the history.
 
-        Rewrites only text this session typed; commits the window, so a later
-        correction cannot undo the repair. None when nothing changes or the
+        Rewrites only text this session typed. Always commits the window (the
+        command chunk's audio included), so no later correction can undo the
+        repair or type the command words. None when nothing changes or the
         edit would backspace more than command_max_backspace.
         """
+        line = self.committed_text + self.typed_window
+        self.commit()
         old = self.history
         if command.scratch:
+            if command.rest:
+                return None  # the words before "scratch that" were never typed
             new = self._scratched(old)
+        elif not old and not command.rest:
+            return None  # nothing of ours to repair, nothing new to type
         else:
-            new = self._repaired(old, command)
+            new = self._repaired(old, command, line)
         prefix = _common_prefix(old, new)
         backspace = len(old) - prefix
         insert = new[prefix:]
         if backspace > self.command_max_backspace or (not backspace and not insert):
             return None
-        line = self.committed_text + self.typed_window
         line = line[:max(0, len(line) - backspace)] + insert
-        self.commit()
         self.committed_text = line[-self.context_chars:] if self.context_chars > 0 else ""
         self._set_history(new)
         return Edit(backspace, insert)
@@ -203,7 +208,7 @@ class LiveSession:
         m = _LAST_END.search(body)
         return history[:m.start() + 1] if m else ""
 
-    def _repaired(self, history, command):
+    def _repaired(self, history, command, line):
         """History with a join or comma repair and the chunk's words appended."""
         base = history
         end_at = re.search(r"[.?!]\s*$", base)
@@ -214,13 +219,17 @@ class LiveSession:
                 base = base.rstrip() + ","
         elif command.end and end_at:
             base = base[:end_at.start()] + base[end_at.start() + 1:]
+        mid_line = self.after_text[:1].isalnum()
+        if not command.rest:
+            # Only punctuation changes; keep the space before a following word.
+            base = base.rstrip() + command.end if command.end else base.rstrip()
+            return base + " " if mid_line else base
         # The line before the history, as the context for the new words.
-        line = self.committed_text + self.typed_window
         before = line[:max(0, len(line) - len(history))] + base
-        words = normalise(command.rest, before, self.after_text) if command.rest else ""
+        words = normalise(command.rest, before, self.after_text)
         if command.end:
             words = words.rstrip().rstrip(".?!,;:") + command.end
-            if self.after_text[:1].isalnum():
+            if mid_line:
                 words += " "
         return base + words
 

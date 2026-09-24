@@ -131,6 +131,39 @@ class ScratchTests(unittest.TestCase):
         self.assertEqual(typed(s, 3, 4, "Next one"), Edit(0, " Next one"))
 
 
+class ReviewFixTests(unittest.TestCase):
+    def test_scratch_with_untyped_words_deletes_nothing(self):
+        s = LiveSession()
+        typed(s, 0, 1, "Ship the release today.")
+        self.assertIsNone(s.apply_command(Command(rest="Actually wait for QA", scratch=True)))
+        self.assertEqual(s.history, "Ship the release today.")
+
+    def test_lone_period_without_history_types_nothing(self):
+        s = LiveSession()
+        s.set_context("the operator's text")
+        self.assertIsNone(s.apply_command(Command(end=".")))
+
+    def test_every_command_commits_the_window(self):
+        s = LiveSession()
+        typed(s, 0, 1, "Hello there.")
+        s.add_chunk(audio(1), 1, 2)  # the command chunk's own audio
+        s.apply_command(Command(end="."))  # nothing to change
+        self.assertEqual(s.chunk_count, 0)
+
+    def test_mid_line_period_alone(self):
+        s = LiveSession()
+        s.set_context("The ", "jumps.")
+        typed(s, 0, 1, "brown fox.")
+        self.assertEqual(s.history, "brown fox ")
+        self.assertEqual(s.apply_command(Command(end=".")), Edit(1, ". "))
+
+    def test_mid_line_comma_alone(self):
+        s = LiveSession()
+        s.set_context("The ", "jumps.")
+        typed(s, 0, 1, "brown fox")
+        self.assertEqual(s.apply_command(Command(comma=True)), Edit(1, ", "))
+
+
 class LimitTests(unittest.TestCase):
     def test_command_backspace_cap(self):
         s = LiveSession(command_max_backspace=10)

@@ -258,8 +258,12 @@ class AchatTarget:
                     self.dead = True
         return False
 
-    def line_context(self):
-        """(text before the cursor, text after it) on a Known line, else None."""
+    def line_context(self, adopt_rev=True):
+        """(text before the cursor, text after it) on a Known line, else None.
+
+        adopt_rev: take the line's current rev for the next edit. Only safe
+        with an empty window; a check made mid-window must pass False.
+        """
         state = self._call({"op": "state"})
         if not isinstance(state, dict) or not state.get("ok") or not state.get("known"):
             return None
@@ -271,7 +275,7 @@ class AchatTarget:
         # after this revision, so adopting it is safe and avoids a stale-rev
         # conflict on the first append after the operator submitted a prompt.
         rev = _rev(state.get("rev"))
-        if rev is not None:
+        if adopt_rev and rev is not None:
             self.rev = rev
         return text[:cursor], text[cursor:]
 

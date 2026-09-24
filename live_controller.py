@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-from live_commands import parse_command
+from live_commands import mentions_command, parse_command
 from live_segmenter import ChunkReady, LongPause
 
 _STOP = object()
@@ -154,9 +154,11 @@ class LiveController:
             self.log(f"[live] correction skipped: {e}")
             return
         text = self.postprocess(raw or "")
-        if parse_command(text) is not None:
-            # A command the fast pass did not hear: never type its words.
+        if mentions_command(text):
+            # A command the fast pass did not hear: never type its words, and
+            # close the window so no later correction brings them back.
             self.log(f"[live] correction skipped: it holds a spoken command ({raw!r})")
+            s.commit()
             return
         before = s.typed_window
         edit = s.apply_correction(t_upto, text)
@@ -193,25 +195,44 @@ class LiveController:
 
     def _run_command(self, command, raw):
         """A spoken repair: one edit over what this session typed."""
-        if getattr(self.target, "exact_line", False):
-            self._verify_history()
+        self._verify_history()
         edit = self.session.apply_command(command)
         self.log(f"[live] command {command} raw={raw!r} -> {_show(edit)}")
         if edit is not None:
             self._send(edit)
 
     def _verify_history(self):
-        """On a target that knows its line exactly, the history must still be
-        exactly what precedes the cursor; otherwise it is not ours to edit."""
+        """Keep only history a command may still rewrite.
+
+        Exact line (achat): the history must still be exactly what precedes
+        the cursor. Screen-read line (WezTerm): the cursor row must still be
+        part of the history's last line. No line at all (xdotool): only what
+        was typed in the current window, since the operator may have typed
+        anywhere during a pause.
+        """
+        s = self.session
+        line_context = getattr(self.target, "line_context", None)
+        if line_context is None:
+            window = s.typed_window
+            s.history = s.history[-len(window):] if window else ""
+            return
+        exact = getattr(self.target, "exact_line", False)
         try:
-            context = self.target.line_context()
+            # Read without adopting the line's rev: the window may still be open.
+            context = line_context(adopt_rev=False) if exact else line_context()
         except Exception as e:
             self.log(f"[live] could not read the target line: {e}")
             context = None
-        if context is None or not context[0].endswith(self.session.history):
-            if self.session.history:
+        before = context[0] if context else ""
+        if exact:
+            ok = context is not None and before.endswith(s.history)
+        else:
+            last = s.history.split("\n")[-1]
+            ok = bool(before) and bool(last) and (last.endswith(before) or before.endswith(last))
+        if not ok:
+            if s.history:
                 self.log("[live] line changed since we typed; commands will not edit it")
-            self.session.forget_history()
+            s.forget_history()
 
     def _sync_line_context(self):
         """At the start of a window, take context from the target's real line."""

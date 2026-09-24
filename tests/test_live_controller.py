@@ -260,7 +260,7 @@ class LineTextTarget(FakeTarget):
         self.after = after
         self.dropped = False
 
-    def line_context(self):
+    def line_context(self, adopt_rev=True):
         return None if self.line is None else (self.line, self.after)
 
     @property
@@ -357,15 +357,17 @@ class CommandTests(unittest.TestCase):
         return LiveController(LiveSession(), self.target, fast, correct, log=lambda *_: None)
 
     def test_period_joins_after_a_thinking_pause(self):
-        ctl = self.make(Script("I want to.", "test more period"))
+        self.target = LineTextTarget("")
+        ctl = self.make(Script("I want to.", "test more, period"), target=self.target)
         ctl.process(chunk(0.0, 1.0))
         ctl.process(LongPause(2.5))  # committed
+        self.target.line = "I want to."
         ctl.process(chunk(6.0, 7.0))
         self.assertEqual(self.target.edits, [Edit(0, "I want to."), Edit(1, " test more.")])
         self.assertEqual(ctl.session.chunk_count, 0)
 
     def test_command_words_never_typed_from_a_correction(self):
-        correct = Script("I want to test more period")
+        correct = Script("I want to test more. Period.")
         ctl = self.make(Script("I want to", "test more"), correct=correct)
         ctl.process(chunk(0.0, 1.0))
         ctl.process(chunk(1.0, 2.0))
@@ -397,7 +399,7 @@ class CommandTests(unittest.TestCase):
     def test_exact_line_that_changed_forgets_history(self):
         target = LineTextTarget("")
         target.exact_line = True
-        ctl = self.make(Script("I want to.", "test more period"), target=target)
+        ctl = self.make(Script("I want to.", "test more, period"), target=target)
         ctl.process(chunk(0.0, 1.0))
         ctl.process(LongPause(2.5))
         target.line = "I want to. And the operator typed"
@@ -407,12 +409,65 @@ class CommandTests(unittest.TestCase):
     def test_exact_line_unchanged_allows_the_repair(self):
         target = LineTextTarget("")
         target.exact_line = True
-        ctl = self.make(Script("I want to.", "test more period"), target=target)
+        ctl = self.make(Script("I want to.", "test more, period"), target=target)
         ctl.process(chunk(0.0, 1.0))
         ctl.process(LongPause(2.5))
         target.line = "I want to."
         ctl.process(chunk(6.0, 7.0))
         self.assertEqual(target.edits[-1], Edit(1, " test more."))
+
+
+class CommandSafetyTests(unittest.TestCase):
+    """Review findings: commands must never let a later edit reach operator text."""
+
+    def make(self, fast, target, correct=None):
+        return LiveController(LiveSession(), target, fast, correct, log=lambda *_: None)
+
+    def test_failed_verification_does_not_leave_the_window_open(self):
+        target = LineTextTarget("")
+        target.exact_line = True
+        ctl = self.make(Script("Hello there.", "Scratch that."), target)
+        ctl.process(chunk(0.0, 1.0))
+        target.line = "Hello there. Operator notes"
+        ctl.process(chunk(1.0, 2.0))
+        self.assertEqual(ctl.session.chunk_count, 0)  # window committed: no correction can reach back
+        self.assertEqual(len(target.edits), 1)
+
+    def test_correction_with_a_command_commits_the_window(self):
+        target = FakeTarget()
+        ctl = self.make(Script("Hello there", "and more"), target,
+                        correct=Script("Hello there. Period. And more"))
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(chunk(1.0, 2.0))
+        ctl.correct()
+        self.assertEqual(ctl.session.chunk_count, 0)
+        self.assertNotIn("Period", "".join(e.insert for e in target.edits))
+
+    def test_screen_target_forgets_history_when_the_row_changed(self):
+        target = LineTextTarget("")
+        ctl = self.make(Script("Fix the bug.", "Scratch that."), target)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(LongPause(2.5))
+        target.line = "yes"  # operator pressed Enter and typed
+        ctl.process(chunk(5.0, 6.0))
+        self.assertEqual(len(target.edits), 1)
+
+    def test_screen_target_keeps_history_when_the_row_matches(self):
+        target = LineTextTarget("")
+        ctl = self.make(Script("Done.", "Oops.", "Scratch that."), target)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(chunk(1.0, 2.0))
+        target.line = "Done. Oops."
+        ctl.process(chunk(2.0, 3.0))
+        self.assertEqual(target.edits[-1], Edit(6, ""))
+
+    def test_keystroke_target_limits_commands_to_the_window(self):
+        target = FakeTarget()  # no line_context: nothing to check against
+        ctl = self.make(Script("Fix the bug.", "Scratch that."), target)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(LongPause(2.5))  # committed; the operator may have typed since
+        ctl.process(chunk(5.0, 6.0))
+        self.assertEqual(len(target.edits), 1)
 
 
 class SelectTranscribersTests(unittest.TestCase):
