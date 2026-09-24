@@ -452,7 +452,7 @@ class WhisperDictate:
     
     def _toggle_recording_impl(self):
         """Actual toggle implementation (runs in main thread)."""
-        if getattr(self, "live_active", False):
+        if getattr(self, "live_active", False) or getattr(self, "live_busy", False):
             self.notify("Live dictation is running; stop it first.")
             return False
         if self.recording:
@@ -564,6 +564,7 @@ class WhisperDictate:
         audio = np.concatenate(self.audio_data, axis=0).flatten()
         
         # Transcribe in background
+        self.oneshot_transcribing = True
         threading.Thread(target=self.transcribe_and_paste, args=(audio,), daemon=True).start()
 
     def _recv_exact(self, sock, size):
@@ -753,6 +754,12 @@ class WhisperDictate:
     
     def transcribe_and_paste(self, audio):
         """Transcribe audio and paste result."""
+        try:
+            self._transcribe_and_paste_impl(audio)
+        finally:
+            self.oneshot_transcribing = False
+
+    def _transcribe_and_paste_impl(self, audio):
         GLib.idle_add(lambda: self.update_status("Transcribing..."))
 
         try:
@@ -841,6 +848,9 @@ class WhisperDictate:
         if self.recording or getattr(self, "transcribe_active", False):
             self.notify("Stop the current recording before starting live dictation.")
             return
+        if getattr(self, "oneshot_transcribing", False):
+            self.notify("A recording is still transcribing; try again in a moment.")
+            return
         previous = getattr(self, "live_controller", None)
         if previous is not None and previous.is_running():
             self.notify("Live dictation is still finishing; try again in a moment.")
@@ -875,6 +885,8 @@ class WhisperDictate:
             on_done=lambda: GLib.idle_add(self._live_done),
         )
         controller.start()
+        self.live_busy = True
+        self._live_stream_started = False
 
         def audio_callback(indata, frames, time_info, status):
             for event in segmenter.feed(indata[:, 0]):
@@ -894,6 +906,7 @@ class WhisperDictate:
             self.notify(f"Live dictation: cannot open microphone: {e}")
             print(f"[whisper-dictate] Live dictation: cannot open microphone: {e}")
             return
+        self._live_stream_started = True
         self.live_active = True
         self.beep_start()
         self.update_icon(True)
@@ -916,10 +929,13 @@ class WhisperDictate:
         self.update_status("Finishing live dictation...")
 
     def _live_done(self):
-        self.beep_stop()
-        self.update_icon(False)
-        self.update_status("Ready")
-        print("[whisper-dictate] Live dictation stopped")
+        started = getattr(self, "_live_stream_started", False)
+        self.live_busy = False
+        if started:
+            self.beep_stop()
+            self.update_icon(False)
+            self.update_status("Ready")
+            print("[whisper-dictate] Live dictation stopped")
         return False
 
     def get_focused_window_class(self):
@@ -963,7 +979,10 @@ class WhisperDictate:
 
     def start_transcribe_session(self):
         """Start mic+speakers transcription, chunked, streamed to a tempfile."""
-        if getattr(self, "transcribe_active", False) or self.recording or getattr(self, "live_active", False):
+        if getattr(self, "transcribe_active", False) or self.recording:
+            return False
+        if getattr(self, "live_active", False) or getattr(self, "live_busy", False):
+            self.notify("Live dictation is running; stop it first.")
             return False
 
         monitor = self._get_monitor_source()
@@ -1867,6 +1886,8 @@ class WhisperDictate:
     
     def quit(self, *args):
         """Quit application."""
+        if getattr(self, "live_active", False):
+            self.stop_live()
         self.stop_remote_monitor()
         Gtk.main_quit()
     

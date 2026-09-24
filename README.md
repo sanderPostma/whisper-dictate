@@ -73,6 +73,9 @@ place (backspace + retype). Press the hotkey again to stop.
 - Switching window or pane mid-session freezes what was typed and continues in the
   new place, append-only.
 - The local fallback model types but does not correct.
+- Corrections work by blindly backspacing up to `live_max_backspace` characters and
+  retyping — don't type by hand in the same window while a live session is running,
+  or the backspaces can eat your manual edits.
 
 Config keys: `live_pause_ms`, `live_max_chunk_s`, `live_window_max_s`,
 `live_commit_pause_ms`, `live_max_backspace`, `live_corrections`,
