@@ -131,7 +131,11 @@ class WezTermTarget:
         return wezterm_focused_pane(self._run) == self.pane_id
 
     def line_context(self):
-        return wezterm_line_context(self.pane_id, self._run)
+        """Text before the cursor, read off the screen. The text after it is left
+        out: a TUI's hardware cursor can sit off the input row, so what follows
+        it on screen is not reliably what follows the operator's cursor."""
+        context = wezterm_line_context(self.pane_id, self._run)
+        return None if context is None else (context[0], "")
 
 
 class XdotoolTarget:

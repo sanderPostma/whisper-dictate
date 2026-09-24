@@ -96,5 +96,22 @@ class LiveSegmenterTests(unittest.TestCase):
         self.assertEqual(seg.flush(), [])
 
 
+class BufferReuseTests(unittest.TestCase):
+    def test_chunks_survive_the_caller_reusing_its_buffer(self):
+        # sounddevice reuses the callback's buffer after the callback returns.
+        seg = LiveSegmenter(16000, pause_ms=100, threshold=0.01, pad_ms=0, min_speech_ms=0)
+        buf = np.zeros(800, dtype=np.float32)
+        events = []
+        for _ in range(10):
+            buf[:] = 0.5
+            events += seg.feed(buf)
+        for _ in range(10):
+            buf[:] = 0.0
+            events += seg.feed(buf)
+        chunks = [e for e in events if isinstance(e, ChunkReady)]
+        self.assertEqual(len(chunks), 1)
+        self.assertAlmostEqual(float(chunks[0].audio.max()), 0.5)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -54,7 +54,9 @@ class LiveSegmenter:
             self._pre = audio[-self.pad_samples:].copy()
 
     def feed(self, block):
-        block = np.asarray(block, dtype=np.float32).reshape(-1)
+        # Copy: the audio callback's buffer is reused once the callback returns,
+        # and chunks keep blocks until the pause after them.
+        block = np.array(block, dtype=np.float32).reshape(-1)
         events = []
         n = block.size
         if n == 0:

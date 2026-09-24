@@ -79,6 +79,11 @@ class ScreenContextTests(unittest.TestCase):
     def test_continuing_a_sentence(self):
         self.assertEqual(self.typed("We are not going", ("ok", "")), " we are not going")
 
+    def test_screen_after_text_is_ignored(self):
+        # The TUI's hardware cursor can sit off the input row; text after it
+        # on screen is not reliably what follows the operator's cursor.
+        self.assertEqual(self.typed("Decking", ("", "restarted, check the")), "Decking")
+
     def test_empty_prompt_keeps_the_capital(self):
         self.assertEqual(self.typed("We are not going", ("", "")), "We are not going")
 

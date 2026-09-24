@@ -894,7 +894,7 @@ class WhisperDictate:
             lambda ok, reason: self.set_remote_available(ok, reason),
         )
 
-    def start_live(self):
+    def start_live(self, retry=False):
         if self.recording or getattr(self, "transcribe_active", False):
             self.notify("Stop the current recording before starting live dictation.")
             return
@@ -905,8 +905,16 @@ class WhisperDictate:
         if previous is not None and previous.is_running():
             self.notify("Live dictation is still finishing; try again in a moment.")
             return
-        target = choose_target(self.get_focused_window_class())
+        wm_class = self.get_focused_window_class()
+        target = choose_target(wm_class)
         if target is None:
+            window = self.get_focused_window()
+            print(f"[whisper-dictate] Live dictation: no target (window={window!r}, "
+                  f"class={wm_class!r}, retry={retry})")
+            if not retry:
+                # Focus can be in flux right at the hotkey; look once more.
+                GLib.timeout_add(250, lambda: self.start_live(retry=True) or False)
+                return
             self.notify("Live dictation: no focused window found.")
             return
         cfg = self.config
@@ -1359,7 +1367,8 @@ class WhisperDictate:
             # around the cursor, then type it with keys as usual.
             context = line_source.line_context()
             if context is not None:
-                shaped = normalise(text, *context)
+                # Before-text only: the screen's after-text is unreliable in TUIs.
+                shaped = normalise(text, context[0], "")
                 print(f"[whisper-dictate] one-shot: screen before={context[0][-40:]!r} "
                       f"after={context[1][:20]!r} -> {shaped!r}")
                 text = shaped
