@@ -172,7 +172,10 @@ class AchatTarget:
 
     def _edit(self, backspace, insert):
         """One edit, retrying while a nudge is mid-steal. Returns the response."""
-        payload = {"op": "edit", "expect_rev": self.rev, "backspace": backspace, "insert": insert}
+        # at_cursor: edit at the operator's cursor, which may be mid-line.
+        # Older achat builds ignore the field and answer cursor_not_at_end.
+        payload = {"op": "edit", "expect_rev": self.rev, "backspace": backspace,
+                   "insert": insert, "at_cursor": True}
         for _ in range(BUSY_RETRIES):
             resp = self._call(payload)
             if resp is None or resp.get("error") != "busy":
@@ -181,7 +184,7 @@ class AchatTarget:
         return resp
 
     def _refresh(self):
-        """Re-read the line; return the state if an append would be safe now."""
+        """Re-read the line; return the state if an insert at the cursor is safe now."""
         state = self._call({"op": "state"})
         if not state or not state.get("ok"):
             return None
@@ -189,8 +192,7 @@ class AchatTarget:
         if rev is None:
             return None
         self.rev = rev
-        text = state.get("text") or ""
-        if state.get("known") and state.get("cursor") == len(text):
+        if state.get("known") and isinstance(state.get("cursor"), int):
             return state
         return None
 
@@ -229,7 +231,8 @@ class AchatTarget:
             # never is). Still report False: the window now ends in our text
             # but a correction must not reach back past theirs. The window is
             # committed, so the spacing can follow the real line.
-            if (state.get("text") or "").endswith((" ", "\n")):
+            before = (state.get("text") or "")[:state["cursor"]]
+            if before.endswith((" ", "\n")):
                 insert = insert.lstrip(" ")
             resp = self._edit(0, insert)
             if resp is not None and resp.get("ok"):
@@ -242,13 +245,14 @@ class AchatTarget:
                     self.dead = True
         return False
 
-    def line_text(self):
-        """Text on the prompt line when an append would land after it, else None."""
+    def line_context(self):
+        """(text before the cursor, text after it) on a Known line, else None."""
         state = self._call({"op": "state"})
         if not isinstance(state, dict) or not state.get("ok") or not state.get("known"):
             return None
         text = state.get("text") or ""
-        if state.get("cursor") != len(text):
+        cursor = state.get("cursor")
+        if not isinstance(cursor, int) or not 0 <= cursor <= len(text):
             return None
         # Called with an empty window: later backspaces only cover text typed
         # after this revision, so adopting it is safe and avoids a stale-rev
@@ -256,7 +260,7 @@ class AchatTarget:
         rev = _rev(state.get("rev"))
         if rev is not None:
             self.rev = rev
-        return text
+        return text[:cursor], text[cursor:]
 
     def still_focused(self):
         if self.dead:

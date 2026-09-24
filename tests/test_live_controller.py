@@ -252,15 +252,16 @@ class LiveControllerTests(unittest.TestCase):
 
 
 class LineTextTarget(FakeTarget):
-    """A target that knows the text already on its line (like achat)."""
+    """A target that knows the text around its cursor (like achat)."""
 
-    def __init__(self, line, ok=True):
+    def __init__(self, line, ok=True, after=""):
         super().__init__(ok)
         self.line = line
+        self.after = after
         self.dropped = False
 
-    def line_text(self):
-        return self.line
+    def line_context(self):
+        return None if self.line is None else (self.line, self.after)
 
     @property
     def last_send_dropped(self):
@@ -291,6 +292,15 @@ class LineContextTests(unittest.TestCase):
         ctl.process(chunk(1.0, 2.0))
         self.assertEqual(target.edits[-1], Edit(0, "there"))
 
+    def test_mid_line_insert_gets_trailing_space(self):
+        target = LineTextTarget("His is a ", after="test sentence.")
+        fast = Script("Quick", "brown")
+        ctl = self.make(fast, target)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(chunk(1.0, 2.0))
+        self.assertEqual(target.edits, [Edit(0, "quick "), Edit(0, "brown ")])
+        self.assertEqual(fast.prompts, ["His is a", "His is a quick"])
+
     def test_line_not_reread_mid_window(self):
         target = LineTextTarget("")
         ctl = self.make(Script("Hello", "there"), target)
@@ -307,7 +317,7 @@ class LineContextTests(unittest.TestCase):
 
     def test_line_text_failure_keeps_the_chunk(self):
         class Broken(LineTextTarget):
-            def line_text(self):
+            def line_context(self):
                 raise RuntimeError("boom")
         target = Broken("")
         ctl = self.make(Script("Hello"), target)

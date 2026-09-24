@@ -31,8 +31,9 @@ def strip_echo(raw, context, max_words=8, min_words=3):
     return raw
 
 
-def normalise(raw, before):
-    """Turn a raw transcription into the exact text to type after `before`."""
+def normalise(raw, before, after=""):
+    """Turn a raw transcription into the exact text to type between `before`
+    and `after` (the rest of the line when dictating mid-line)."""
     # Precomposed: achat refuses combining marks, and backspace counts are
     # per character on every target.
     text = unicodedata.normalize("NFC", " ".join((raw or "").split()))
@@ -50,6 +51,8 @@ def normalise(raw, before):
                 text = low + text[1:]
     if before and not before.endswith((" ", "\n")):
         text = " " + text
+    if after[:1].isalnum():
+        text += " "
     return unicodedata.normalize("NFC", text)
 
 
@@ -69,6 +72,7 @@ class LiveSession:
         self.max_backspace = int(max_backspace)
         self.window_max_s = float(window_max_s)
         self.committed_text = ""
+        self.after_text = ""  # rest of the line after the cursor (mid-line dictation)
         self._chunks = []  # (audio, t0, t1)
         self._pieces = []  # (t1, typed text), in typing order
 
@@ -91,7 +95,7 @@ class LiveSession:
         self._chunks.append((audio, t0, t1))
 
     def add_fast_result(self, t1, raw):
-        text = normalise(raw, self.committed_text + self.typed_window)
+        text = normalise(raw, self.committed_text + self.typed_window, self.after_text)
         if not text:
             return None
         self._pieces.append((t1, text))
@@ -105,7 +109,7 @@ class LiveSession:
 
     def apply_correction(self, t_upto, raw):
         """Rewrite the text typed for chunks ending at or before t_upto."""
-        new = normalise(raw, self.committed_text)
+        new = normalise(raw, self.committed_text, self.after_text)
         if not new:
             return None
         covered = [p for p in self._pieces if p[0] <= t_upto]
@@ -136,9 +140,10 @@ class LiveSession:
         self._chunks = []
         self._pieces = []
 
-    def set_context(self, text):
-        """Replace committed text with what is really on the line (window empty)."""
-        self.committed_text = text[-self.context_chars:] if self.context_chars > 0 else ""
+    def set_context(self, before, after=""):
+        """Take context from the real line around the cursor (window empty)."""
+        self.committed_text = before[-self.context_chars:] if self.context_chars > 0 else ""
+        self.after_text = after
 
     def _prompt(self, text):
         tail = text[-self.context_chars:].strip() if self.context_chars > 0 else ""

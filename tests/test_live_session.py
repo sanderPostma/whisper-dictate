@@ -71,7 +71,17 @@ class NormaliseTests(unittest.TestCase):
         self.assertFalse(any(0x0300 <= ord(c) <= 0x036F for c in text))
 
 
-class FastResultTests(unittest.TestCase):
+    def test_word_right_after_the_cursor_gets_a_space(self):
+        self.assertEqual(normalise("Quick", "His is a ", "test sentence."), "quick ")
+
+    def test_space_already_after_the_cursor(self):
+        self.assertEqual(normalise("quick", "His is a", " test"), " quick")
+
+    def test_punctuation_after_the_cursor_gets_no_space(self):
+        self.assertEqual(normalise("quick", "His is a", ", test"), " quick")
+
+
+
     def test_fast_result_is_append_edit(self):
         s = LiveSession()
         s.add_chunk(audio(1), 0.0, 1.0)
@@ -184,7 +194,27 @@ class CommitTests(unittest.TestCase):
         self.assertEqual(s.committed_text, "there")
 
 
-class PromptTests(unittest.TestCase):
+    def test_after_text_shapes_corrections_but_not_prompts(self):
+        s = LiveSession()
+        s.set_context("His is a ", "test.")
+        s.add_chunk(audio(1), 0.0, 1.0)
+        self.assertEqual(s.add_fast_result(1.0, "quick"), Edit(0, "quick "))
+        s.add_chunk(audio(1), 1.0, 2.0)
+        self.assertEqual(s.add_fast_result(2.0, "brunch"), Edit(0, "brunch "))
+        self.assertEqual(s.fast_prompt(), "His is a quick brunch")
+        audio_, t_upto = s.window_audio()
+        self.assertEqual(s.apply_correction(t_upto, "quick branch"), Edit(5, "anch "))
+
+    def test_commit_keeps_after_text(self):
+        # The cursor has not moved: the rest of the line is still after it.
+        s = LiveSession()
+        s.set_context("a ", "b")
+        s.commit()
+        s.add_chunk(audio(1), 0.0, 1.0)
+        self.assertEqual(s.add_fast_result(1.0, "x"), Edit(0, "x "))
+
+
+
     def test_fast_prompt_has_base_committed_and_window(self):
         s = session_with([(0.0, 1.0, "One.")], base_prompt="Vocabulary: git")
         s.commit()

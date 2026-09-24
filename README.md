@@ -71,7 +71,10 @@ place (backspace + retype). Press the hotkey again to stop.
 - WezTerm pane running `achat run`: typed into the agent's prompt line through achat's
   input-control socket. Every edit is checked against the line's revision, so typing by
   hand or an incoming nudge is never overwritten: dictation just continues after it,
-  and text already in the prompt is used as context (spacing, capitalisation).
+  and text already in the prompt is used as context (spacing, capitalisation). You can
+  move the cursor back into a sentence and dictate there: the text before the cursor is
+  the context, and a space is added before the word that follows. Mid-line dictation
+  needs an achat build whose `edit` supports `at_cursor`.
   Needs an `achat` build with the input socket; restart old `achat run` sessions.
 - Other WezTerm panes: typed into the pane focused at start via `wezterm cli send-text`.
 - Other windows: `xdotool`.

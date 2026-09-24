@@ -160,16 +160,16 @@ class LiveController:
 
     def _sync_line_context(self):
         """At the start of a window, take context from the target's real line."""
-        line_text = getattr(self.target, "line_text", None)
-        if line_text is None:
+        line_context = getattr(self.target, "line_context", None)
+        if line_context is None:
             return
         try:
-            text = line_text()
+            context = line_context()
         except Exception as e:
             self.log(f"[live] could not read the target line: {e}")
             return
-        if text is not None:
-            self.session.set_context(text)
+        if context is not None:
+            self.session.set_context(*context)
 
     def _send(self, edit):
         try:

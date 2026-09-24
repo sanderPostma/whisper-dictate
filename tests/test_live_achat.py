@@ -149,30 +149,32 @@ class DiscoveryTests(unittest.TestCase):
 
 
 class SendTests(unittest.TestCase):
-    def test_line_text_reads_known_line(self):
+    def test_line_context_reads_known_line(self):
         achat = FakeAchat({"ok": True, "rev": 4, "known": True, "text": "fix the", "cursor": 7})
-        self.assertEqual(target(achat).line_text(), "fix the")
+        self.assertEqual(target(achat).line_context(), ("fix the", ""))
 
-    def test_line_text_adopts_current_rev(self):
+    def test_line_context_splits_at_the_cursor(self):
+        achat = FakeAchat({"ok": True, "rev": 4, "known": True,
+                           "text": "His is a test.", "cursor": 9})
+        self.assertEqual(target(achat).line_context(), ("His is a ", "test."))
+
+    def test_line_context_adopts_current_rev(self):
         # After a submitted prompt the first append must not hit a stale rev.
         achat = FakeAchat({"ok": True, "rev": 40, "known": True, "text": "", "cursor": 0})
         t = target(achat)
-        t.line_text()
+        t.line_context()
         self.assertEqual(t.rev, 40)
 
-    def test_line_text_ignores_bad_reply(self):
+    def test_line_context_ignores_bad_reply(self):
         t = target(FakeAchat(["not", "a", "dict"]))
-        self.assertIsNone(t.line_text())
+        self.assertIsNone(t.line_context())
 
-    def test_line_text_none_when_unknown_or_cursor_moved(self):
-        achat = FakeAchat({"ok": True, "rev": 4, "known": False, "text": "", "cursor": 0},
-                          {"ok": True, "rev": 4, "known": True, "text": "fix", "cursor": 1})
-        t = target(achat)
-        self.assertIsNone(t.line_text())
-        self.assertIsNone(t.line_text())
+    def test_line_context_none_when_unknown(self):
+        achat = FakeAchat({"ok": True, "rev": 4, "known": False, "text": "", "cursor": 0})
+        self.assertIsNone(target(achat).line_context())
 
-    def test_line_text_none_when_socket_gone(self):
-        self.assertIsNone(target(FakeAchat(ConnectionRefusedError())).line_text())
+    def test_line_context_none_when_socket_gone(self):
+        self.assertIsNone(target(FakeAchat(ConnectionRefusedError())).line_context())
 
     def test_dropped_flag(self):
         achat = FakeAchat(
@@ -201,8 +203,8 @@ class SendTests(unittest.TestCase):
         self.assertTrue(t.send(Edit(0, "abc")))
         self.assertTrue(t.send(Edit(2, "xy")))
         self.assertEqual(achat.requests, [
-            {"op": "edit", "expect_rev": 10, "backspace": 0, "insert": "abc"},
-            {"op": "edit", "expect_rev": 13, "backspace": 2, "insert": "xy"},
+            {"op": "edit", "expect_rev": 10, "backspace": 0, "insert": "abc", "at_cursor": True},
+            {"op": "edit", "expect_rev": 13, "backspace": 2, "insert": "xy", "at_cursor": True},
         ])
         self.assertEqual(t.rev, 17)
 
@@ -231,6 +233,15 @@ class SendTests(unittest.TestCase):
         target(achat).send(Edit(0, " two"))
         self.assertEqual(achat.requests[2]["insert"], "two")
 
+    def test_append_retry_works_mid_line(self):
+        achat = FakeAchat(
+            {"ok": False, "error": "conflict", "rev": 12},
+            {"ok": True, "rev": 12, "known": True, "text": "His is a test", "cursor": 9},
+            {"ok": True, "rev": 15},
+        )
+        target(achat).send(Edit(0, " quick "))
+        self.assertEqual(achat.requests[2]["insert"], "quick ")
+
     def test_correction_never_backspaces_over_operator_text(self):
         achat = FakeAchat({"ok": False, "error": "conflict", "rev": 12})
         t = target(achat)
@@ -238,13 +249,15 @@ class SendTests(unittest.TestCase):
         self.assertEqual(len(achat.requests), 1)
         self.assertEqual(t.rev, 12)
 
-    def test_append_not_retried_when_cursor_moved(self):
+    def test_append_follows_a_moved_cursor(self):
+        # The operator moved the cursor mid-line: the words go where it is now.
         achat = FakeAchat(
-            {"ok": False, "error": "cursor_not_at_end", "rev": 11},
+            {"ok": False, "error": "conflict", "rev": 11},
             {"ok": True, "rev": 11, "known": True, "text": "hello", "cursor": 1},
+            {"ok": True, "rev": 12},
         )
         self.assertFalse(target(achat).send(Edit(0, "x")))
-        self.assertEqual(len(achat.requests), 2)
+        self.assertEqual(achat.requests[2]["expect_rev"], 11)
 
     def test_append_not_retried_on_unknown_line(self):
         achat = FakeAchat(
