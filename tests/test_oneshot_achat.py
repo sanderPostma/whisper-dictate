@@ -91,6 +91,14 @@ class ScreenContextTests(unittest.TestCase):
         self.assertEqual(self.typed("We are", None), "We are")
 
 
+class SlashCommandTests(unittest.TestCase):
+    def test_keystroke_path_drops_the_period_of_a_slash_command(self):
+        with mock.patch.object(whisper_dictate.subprocess, "run") as run, \
+                mock.patch.object(whisper_dictate.time, "sleep"), mock.patch("builtins.print"):
+            app().output_text("/compact.")
+        self.assertEqual(run.call_args[0][0][-1], "/compact")
+
+
 class OneShotEnterTests(unittest.TestCase):
     def test_enter_pressed_on_the_line_source_after_typing(self):
         order = []

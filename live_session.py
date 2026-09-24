@@ -48,6 +48,11 @@ def strip_echo(raw, context, max_words=8, min_words=3, min_words_inside=4):
     return raw
 
 
+def is_slash_command(line):
+    """A line like "/compact" or "/review the branch": no sentence punctuation."""
+    return line.lstrip().startswith("/")
+
+
 def normalise(raw, before, after=""):
     """Turn a raw transcription into the exact text to type between `before`
     and `after` (the rest of the line when dictating mid-line)."""
@@ -68,6 +73,8 @@ def normalise(raw, before, after=""):
                 text = low + text[1:]
     if before and not before.endswith((" ", "\n")) and not text.startswith("\n"):
         text = " " + text
+    if is_slash_command(before.split("\n")[-1] + text):
+        text = text.rstrip(".?!")
     if after[:1].isalnum():
         # Mid-sentence: an utterance-final full stop would split the sentence.
         text = text.rstrip(".?!") + " "

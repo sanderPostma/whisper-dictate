@@ -45,7 +45,7 @@ from live_commands import parse_cursor, split_enter
 from live_controller import LiveController, select_transcribers
 from live_output import WezTermTarget, XdotoolTarget, choose_target
 from live_segmenter import LiveSegmenter
-from live_session import LiveSession, normalise
+from live_session import LiveSession, is_slash_command, normalise
 
 # Optional: transformers for distil-whisper models
 try:
@@ -1422,6 +1422,8 @@ class WhisperDictate:
 
     def output_text(self, text, line_source=None, press_enter=False):
         """Output text based on mode, then press Enter if it was asked for."""
+        if is_slash_command(text):
+            text = text.rstrip(".?!")  # "/compact." is not a command
         if text:
             self._output_text(text, line_source)
         if press_enter and self.config.get("output_mode", "type") in ("type", "both"):

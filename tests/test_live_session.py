@@ -78,6 +78,19 @@ class NormaliseTests(unittest.TestCase):
         self.assertEqual(strip_echo("the branch", "merge the branch"), "the branch")
 
 
+    def test_slash_command_gets_no_sentence_punctuation(self):
+        self.assertEqual(normalise("/compact.", ""), "/compact")
+        self.assertEqual(normalise("/review the branch.", ""), "/review the branch")
+
+    def test_words_after_a_slash_command_on_the_line(self):
+        self.assertEqual(normalise("The login flow.", "/review"), " the login flow")
+
+    def test_slash_command_on_a_new_line(self):
+        self.assertEqual(normalise("/clear.", "Done.\n"), "/clear")
+
+    def test_ordinary_sentences_keep_their_punctuation(self):
+        self.assertEqual(normalise("Use a/b testing.", ""), "Use a/b testing.")
+
     def test_newlines_survive(self):
         # "new line" -> "\n" comes from the replacements; it must not become a space.
         self.assertEqual(normalise("first line\n second  line", ""), "first line\nsecond line")
