@@ -530,6 +530,24 @@ class EnterTests(unittest.TestCase):
         self.assertEqual(target.edits, [Edit(0, "Do it")])
 
 
+class CursorMoveTests(unittest.TestCase):
+    def test_move_commits_and_forgets_then_dictation_goes_on(self):
+        from live_commands import CursorMove
+        moves = []
+        target = FakeTarget()
+        target.move_cursor = lambda move: moves.append(move) or True
+        ctl = LiveController(LiveSession(), target, Script("Fix the fox.", "Cursor back two words.", "brown"),
+                             None, log=lambda *_: None)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(chunk(1.0, 2.0))
+        self.assertEqual(moves, [CursorMove("word", -1, 2)])
+        self.assertEqual(ctl.session.history, "")
+        self.assertEqual(ctl.session.chunk_count, 0)
+        ctl.process(chunk(2.0, 3.0))
+        self.assertEqual(target.edits[-1].backspace, 0)
+        self.assertEqual(len(target.edits), 2)  # the command itself typed nothing
+
+
 class SelectTranscribersTests(unittest.TestCase):
     def setUp(self):
         self.down = False

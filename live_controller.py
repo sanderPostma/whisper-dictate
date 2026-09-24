@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-from live_commands import Command, mentions_command, parse_command
+from live_commands import Command, mentions_command, parse_command, parse_cursor
 from live_segmenter import ChunkReady, LongPause
 
 _STOP = object()
@@ -134,6 +134,10 @@ class LiveController:
             self._report(f"Live transcription failed: {e}")
             return
         text = self.postprocess(raw or "")
+        move = parse_cursor(text)
+        if move is not None:
+            self._run_move(move, raw)
+            return
         command = parse_command(text)
         if command is not None and command.enter:
             self._run_enter(chunk, command, raw)
@@ -202,6 +206,16 @@ class LiveController:
             new = self.make_target()
             if new is not None:
                 self.target = new
+
+    def _run_move(self, move, raw):
+        """A spoken cursor move: nothing typed before it may be rewritten after
+        it, and dictation continues wherever the cursor lands."""
+        self.session.commit()
+        self.session.forget_history()
+        self.session.after_text = ""  # re-read at the next window start where possible
+        mover = getattr(self.target, "move_cursor", None)
+        ok = mover(move) if mover is not None else False
+        self.log(f"[live] cursor {move} raw={raw!r} ({'ok' if ok else 'not moved'})")
 
     def _run_enter(self, chunk, command, raw):
         """Type what came with "press enter", then submit the line."""

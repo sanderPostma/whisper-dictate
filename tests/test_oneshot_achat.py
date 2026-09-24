@@ -109,6 +109,19 @@ class OneShotEnterTests(unittest.TestCase):
         self.assertEqual(run.call_args[0][0], ["xdotool", "key", "--clearmodifiers", "Return"])
 
 
+class OneShotCursorTests(unittest.TestCase):
+    def test_cursor_command_moves_instead_of_typing(self):
+        from live_commands import CursorMove
+        a = app()
+        moves = []
+        source = whisper_dictate.WezTermTarget(7, "42")
+        source.move_cursor = lambda move: moves.append(move) or True
+        with mock.patch.object(whisper_dictate.subprocess, "run") as run, mock.patch("builtins.print"):
+            a._oneshot_move(source, CursorMove("end"))
+        self.assertEqual(moves, [CursorMove("end")])
+        run.assert_not_called()
+
+
 class LivePostprocessTests(unittest.TestCase):
     def test_live_corrections_do_not_retype_the_whole_window(self):
         # One-shot tidying ("Okay." -> "okay") made the fast pass and the

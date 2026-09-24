@@ -15,6 +15,7 @@ import tempfile
 import time
 
 from live_output import wezterm_focused_pane, xdotool_active_window
+from live_commands import word_target
 from live_session import Edit, normalise
 
 BUSY_RETRIES = 8
@@ -259,19 +260,38 @@ class AchatTarget:
                     self.dead = True
         return False
 
+    def move_cursor(self, move):
+        """Move with plain arrow keys, counted from the known line, so achat's
+        line model follows every step (a word-jump key it did not know would
+        leave the line Unknown and stop dictation)."""
+        state = self._call({"op": "state"})
+        if not isinstance(state, dict) or not state.get("ok") or not state.get("known"):
+            return False
+        text = state.get("text") or ""
+        cursor = state.get("cursor")
+        if not isinstance(cursor, int):
+            return False
+        steps = word_target(text, cursor, move) - cursor
+        if steps == 0:
+            return True
+        return self._keys((b"\x1b[C" if steps > 0 else b"\x1b[D") * abs(steps))
+
+    def _keys(self, data):
+        try:
+            res = self._run(
+                ["wezterm", "cli", "send-text", "--pane-id", str(self.pane_id), "--no-paste"],
+                input=data, capture_output=True, timeout=5,
+            )
+        except Exception:
+            return False
+        return res.returncode == 0
+
     def press_enter(self):
         """Submit the line: Enter as a keystroke on the pane (the socket's edit
         never submits). achat reads it as the operator's own Enter. A short
         wait first, so the TUI does not take text and Enter as one paste."""
         self._sleep(ENTER_SETTLE_S)
-        try:
-            res = self._run(
-                ["wezterm", "cli", "send-text", "--pane-id", str(self.pane_id), "--no-paste"],
-                input=b"\r", capture_output=True, timeout=5,
-            )
-        except Exception:
-            return False
-        return res.returncode == 0
+        return self._keys(b"\r")
 
     def line_context(self, adopt_rev=True):
         """(text before the cursor, text after it) on a Known line, else None.

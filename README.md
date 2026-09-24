@@ -65,6 +65,13 @@ Pressing Enter by voice works in one-shot and live mode: end with "press enter" 
 "press return"), or say "enter" on its own. A bare "enter" inside a sentence stays text.
 "new line" / "new paragraph" insert line breaks through the replacements file.
 
+Cursor commands, said as a whole utterance (one-shot or live): "cursor back" / "cursor
+forward" (one word), "cursor back 3 words" / "cursor forward three words" (digits or number
+words), "cursor to start" / "cursor to end" (also "the beginning", "… of the line"). In achat
+prompts the move is counted from the known line and sent as arrow keys; other WezTerm panes
+get Alt+B / Alt+F and Ctrl+A / Ctrl+E; other windows Ctrl+Left / Ctrl+Right and Home / End.
+Dictation continues at the new cursor position.
+
 ## Live dictation
 
 Press the dictation hotkey (`<Alt>d`) twice within a second (double beep), or pick

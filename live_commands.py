@@ -105,3 +105,70 @@ def parse_command(text):
     if not end and not comma and not enter:
         return None
     return Command(rest=text.strip(), comma=comma, end=end, enter=enter)
+
+
+# --- Cursor movement ("cursor back 3 words", "cursor to start") -----------
+
+_NUMBERS = {
+    "one": 1, "a": 1, "two": 2, "to": 2, "too": 2, "three": 3, "four": 4, "for": 4,
+    "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+    "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+    "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+}
+_CURSOR_WORD_RE = re.compile(
+    r"^\s*cursor[\s,]+(back|backward|backwards|left|forward|forwards|right)"
+    r"(?:[\s,]+(\d+|" + "|".join(_NUMBERS) + r")(?:[\s,]+words?)?|[\s,]+words?)?[\s.!,]*$",
+    re.IGNORECASE,
+)
+_CURSOR_EDGE_RE = re.compile(
+    r"^\s*cursor[\s,]+to[\s,]+(?:the[\s,]+)?(start|beginning|end)"
+    r"(?:[\s,]+of[\s,]+(?:the[\s,]+)?line)?[\s.!,]*$",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class CursorMove:
+    kind: str  # "word", "start" or "end"
+    direction: int = 0  # -1 back, +1 forward (words only)
+    count: int = 0  # words
+
+
+def parse_cursor(text):
+    """A cursor command said as the whole utterance, or None."""
+    text = (text or "").strip()
+    m = _CURSOR_EDGE_RE.match(text)
+    if m:
+        return CursorMove("start" if m.group(1).lower() in ("start", "beginning") else "end")
+    m = _CURSOR_WORD_RE.match(text)
+    if not m:
+        return None
+    direction = -1 if m.group(1).lower().startswith(("back", "left")) else 1
+    raw = (m.group(2) or "1").lower()
+    count = int(raw) if raw.isdigit() else _NUMBERS[raw]
+    return CursorMove("word", direction, max(1, count))
+
+
+def _is_word(ch):
+    return ch.isalnum() or ch == "_"
+
+
+def word_target(text, cursor, move):
+    """Where the cursor lands in text (readline word rules)."""
+    if move.kind == "start":
+        return 0
+    if move.kind == "end":
+        return len(text)
+    i = cursor
+    for _ in range(move.count):
+        if move.direction < 0:
+            while i > 0 and not _is_word(text[i - 1]):
+                i -= 1
+            while i > 0 and _is_word(text[i - 1]):
+                i -= 1
+        else:
+            while i < len(text) and not _is_word(text[i]):
+                i += 1
+            while i < len(text) and _is_word(text[i]):
+                i += 1
+    return i

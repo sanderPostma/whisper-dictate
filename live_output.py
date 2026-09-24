@@ -133,6 +133,14 @@ class WezTermTarget:
     def press_enter(self):
         return self.send_keys(b"\r")
 
+    def move_cursor(self, move):
+        """Readline keys: Alt+B / Alt+F per word, Ctrl+A / Ctrl+E for the ends."""
+        if move.kind == "start":
+            return self.send_keys(b"\x01")
+        if move.kind == "end":
+            return self.send_keys(b"\x05")
+        return self.send_keys((b"\x1bb" if move.direction < 0 else b"\x1bf") * move.count)
+
     def send_keys(self, data):
         """Raw bytes to the pane as typed input (\r is Enter)."""
         try:
@@ -191,9 +199,20 @@ class XdotoolTarget:
         return xdotool_active_window(self._run) == self.window_id
 
     def press_enter(self):
+        return self._key("Return")
+
+    def move_cursor(self, move):
+        """Editor keys: Ctrl+Left / Ctrl+Right per word, Home / End."""
+        if move.kind in ("start", "end"):
+            return self._key("Home" if move.kind == "start" else "End")
+        return self._key("ctrl+Left" if move.direction < 0 else "ctrl+Right", repeat=move.count)
+
+    def _key(self, key, repeat=1):
+        cmd = ["xdotool", "key", "--clearmodifiers"]
+        if repeat > 1:
+            cmd += ["--repeat", str(repeat)]
         try:
-            res = self._run(["xdotool", "key", "--clearmodifiers", "Return"],
-                            capture_output=True, timeout=5)
+            res = self._run(cmd + [key], capture_output=True, timeout=10)
         except Exception:
             return False
         return res.returncode == 0

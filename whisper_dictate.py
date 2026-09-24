@@ -41,9 +41,9 @@ from asr_models import (
 )
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
-from live_commands import split_enter
+from live_commands import parse_cursor, split_enter
 from live_controller import LiveController, select_transcribers
-from live_output import WezTermTarget, choose_target
+from live_output import WezTermTarget, XdotoolTarget, choose_target
 from live_segmenter import LiveSegmenter
 from live_session import LiveSession, normalise
 
@@ -907,6 +907,10 @@ class WhisperDictate:
         # Apply text replacements. Where the line is readable it decides case,
         # so the blunt single-word lowercasing is left out there.
         text = self.apply_replacements(text, lower_single_word=line_source is None)
+        move = parse_cursor(text)
+        if move is not None:
+            GLib.idle_add(lambda: self._oneshot_move(line_source, move))
+            return
         # "... press enter" (or "enter" said alone) submits after typing.
         text, press_enter = split_enter(text)
 
@@ -1428,6 +1432,15 @@ class WhisperDictate:
                 ok = subprocess.run(["xdotool", "key", "--clearmodifiers", "Return"],
                                     check=False).returncode == 0
             print(f"[whisper-dictate] one-shot: Enter pressed ({'ok' if ok else 'failed'})")
+        self.update_status("Ready")
+        return False
+
+    def _oneshot_move(self, line_source, move):
+        """A spoken cursor move instead of text."""
+        target = line_source if line_source is not None else XdotoolTarget.detect()
+        mover = getattr(target, "move_cursor", None)
+        ok = mover(move) if mover is not None else False
+        print(f"[whisper-dictate] one-shot: cursor {move} ({'ok' if ok else 'not moved'})")
         self.update_status("Ready")
         return False
 
