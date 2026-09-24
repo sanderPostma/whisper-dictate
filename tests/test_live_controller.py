@@ -351,6 +351,70 @@ class LineContextTests(unittest.TestCase):
         self.assertEqual(self.errors, [])
 
 
+class CommandTests(unittest.TestCase):
+    def make(self, fast, target=None, correct=None):
+        self.target = target or FakeTarget()
+        return LiveController(LiveSession(), self.target, fast, correct, log=lambda *_: None)
+
+    def test_period_joins_after_a_thinking_pause(self):
+        ctl = self.make(Script("I want to.", "test more period"))
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(LongPause(2.5))  # committed
+        ctl.process(chunk(6.0, 7.0))
+        self.assertEqual(self.target.edits, [Edit(0, "I want to."), Edit(1, " test more.")])
+        self.assertEqual(ctl.session.chunk_count, 0)
+
+    def test_command_words_never_typed_from_a_correction(self):
+        correct = Script("I want to test more period")
+        ctl = self.make(Script("I want to", "test more"), correct=correct)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(chunk(1.0, 2.0))
+        ctl.correct()
+        self.assertEqual(len(self.target.edits), 2)
+
+    def test_scratch_that(self):
+        ctl = self.make(Script("Done.", "I want to go home.", "scratch that"))
+        for i in range(3):
+            ctl.process(chunk(float(i), i + 1.0))
+        self.assertEqual(self.target.edits[-1], Edit(19, ""))
+
+    def test_focus_change_forgets_history(self):
+        new_target = FakeTarget()
+        ctl = self.make(Script("Done.", "scratch that"))
+        ctl.make_target = lambda: new_target
+        ctl.process(chunk(0.0, 1.0))
+        self.target.focused = False
+        ctl.process(chunk(1.0, 2.0))
+        self.assertEqual(new_target.edits, [])
+
+    def test_failed_send_forgets_history(self):
+        target = FakeTarget(ok=False)
+        target.recoverable_rejections = True
+        ctl = self.make(Script("Done.", "scratch that"), target=target)
+        ctl.process(chunk(0.0, 1.0))
+        self.assertEqual(ctl.session.history, "")
+
+    def test_exact_line_that_changed_forgets_history(self):
+        target = LineTextTarget("")
+        target.exact_line = True
+        ctl = self.make(Script("I want to.", "test more period"), target=target)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(LongPause(2.5))
+        target.line = "I want to. And the operator typed"
+        ctl.process(chunk(6.0, 7.0))
+        self.assertEqual(target.edits[-1].backspace, 0)  # nothing of theirs erased
+
+    def test_exact_line_unchanged_allows_the_repair(self):
+        target = LineTextTarget("")
+        target.exact_line = True
+        ctl = self.make(Script("I want to.", "test more period"), target=target)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(LongPause(2.5))
+        target.line = "I want to."
+        ctl.process(chunk(6.0, 7.0))
+        self.assertEqual(target.edits[-1], Edit(1, " test more."))
+
+
 class SelectTranscribersTests(unittest.TestCase):
     def setUp(self):
         self.down = False

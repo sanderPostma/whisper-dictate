@@ -12,6 +12,7 @@ import time
 
 import numpy as np
 
+from live_commands import parse_command
 from live_segmenter import ChunkReady, LongPause
 
 _STOP = object()
@@ -126,6 +127,10 @@ class LiveController:
             self._report(f"Live transcription failed: {e}")
             return
         text = self.postprocess(raw or "")
+        command = parse_command(text)
+        if command is not None:
+            self._run_command(command, raw)
+            return
         edit = self.session.add_fast_result(chunk.t1, text)
         self.log(f"[live] fast {time.monotonic() - started:.2f}s raw={raw!r} -> {_show(edit)}")
         if edit is not None:
@@ -148,8 +153,13 @@ class LiveController:
         except Exception as e:
             self.log(f"[live] correction skipped: {e}")
             return
+        text = self.postprocess(raw or "")
+        if parse_command(text) is not None:
+            # A command the fast pass did not hear: never type its words.
+            self.log(f"[live] correction skipped: it holds a spoken command ({raw!r})")
+            return
         before = s.typed_window
-        edit = s.apply_correction(t_upto, self.postprocess(raw or ""))
+        edit = s.apply_correction(t_upto, text)
         self.log(f"[live] correct {time.monotonic() - started:.2f}s over {s.chunk_count} chunks "
                  f"raw={raw!r} window={before!r} -> {_show(edit)}")
         if edit is not None:
@@ -172,6 +182,7 @@ class LiveController:
     def _retarget(self):
         """Focus moved: freeze the window and follow the new focus, append-only."""
         self.session.commit()
+        self.session.forget_history()
         # The old line's text after the cursor means nothing in the new place;
         # a target that knows its line sets it again at the next window.
         self.session.after_text = ""
@@ -179,6 +190,28 @@ class LiveController:
             new = self.make_target()
             if new is not None:
                 self.target = new
+
+    def _run_command(self, command, raw):
+        """A spoken repair: one edit over what this session typed."""
+        if getattr(self.target, "exact_line", False):
+            self._verify_history()
+        edit = self.session.apply_command(command)
+        self.log(f"[live] command {command} raw={raw!r} -> {_show(edit)}")
+        if edit is not None:
+            self._send(edit)
+
+    def _verify_history(self):
+        """On a target that knows its line exactly, the history must still be
+        exactly what precedes the cursor; otherwise it is not ours to edit."""
+        try:
+            context = self.target.line_context()
+        except Exception as e:
+            self.log(f"[live] could not read the target line: {e}")
+            context = None
+        if context is None or not context[0].endswith(self.session.history):
+            if self.session.history:
+                self.log("[live] line changed since we typed; commands will not edit it")
+            self.session.forget_history()
 
     def _sync_line_context(self):
         """At the start of a window, take context from the target's real line."""
@@ -191,6 +224,8 @@ class LiveController:
             self.log(f"[live] could not read the target line: {e}")
             return
         if context is not None:
+            if getattr(self.target, "exact_line", False) and not context[0].endswith(self.session.history):
+                self.session.forget_history()
             self.session.set_context(*context)
             self.log(f"[live] line context before={context[0][-60:]!r} after={context[1][:30]!r}")
 
@@ -201,6 +236,7 @@ class LiveController:
         except Exception as e:
             self.log(f"[live] target.send raised: {e}")
         self.session.commit()
+        self.session.forget_history()
         if getattr(self.target, "recoverable_rejections", False):
             self.log("[live] edit rejected; committing window")
             if getattr(self.target, "last_send_dropped", False):

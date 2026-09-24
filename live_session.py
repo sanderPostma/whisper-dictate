@@ -5,6 +5,7 @@ window may be rewritten by a correction; committed text is never edited again
 and is only used as context for later transcriptions.
 """
 
+import re
 import unicodedata
 from dataclasses import dataclass
 
@@ -77,13 +78,21 @@ def _common_prefix(a, b):
     return n
 
 
+_LAST_END = re.compile(r"[.?!][^.?!]*$")
+
+
 class LiveSession:
-    def __init__(self, base_prompt="", context_chars=400, max_backspace=80, window_max_s=12.0):
+    def __init__(self, base_prompt="", context_chars=400, max_backspace=80, window_max_s=12.0,
+                 command_max_backspace=300):
         self.base_prompt = base_prompt or ""
         self.context_chars = int(context_chars)
         self.max_backspace = int(max_backspace)
+        self.command_max_backspace = int(command_max_backspace)
         self.window_max_s = float(window_max_s)
         self.committed_text = ""
+        # What this session typed that is still right before the cursor,
+        # across commits: the only text a spoken command may rewrite.
+        self.history = ""
         self.after_text = ""  # rest of the line after the cursor (mid-line dictation)
         self._chunks = []  # (audio, t0, t1)
         self._pieces = []  # (t1, typed text), in typing order
@@ -111,6 +120,7 @@ class LiveSession:
         if not text:
             return None
         self._pieces.append((t1, text))
+        self._set_history(self.history + text)
         return Edit(0, text)
 
     def window_audio(self):
@@ -135,6 +145,7 @@ class LiveSession:
             return None
         insert = new[prefix:] + "".join(text for _, text in rest)
         self._pieces = [(t_upto, new)] + rest
+        self._set_history(self.history[:max(0, len(self.history) - backspace)] + insert)
         return Edit(backspace, insert)
 
     def should_commit(self, long_pause=False, focus_ok=True, incoming_s=0.0):
@@ -151,6 +162,67 @@ class LiveSession:
         self.committed_text = text[-max(self.context_chars, 1):]
         self._chunks = []
         self._pieces = []
+
+    def _set_history(self, text):
+        self.history = text[-max(self.context_chars, self.command_max_backspace):]
+
+    def forget_history(self):
+        """The text before the cursor is no longer known to be ours."""
+        self.history = ""
+
+    def apply_command(self, command):
+        """Apply a spoken repair (see live_commands) as one edit over the history.
+
+        Rewrites only text this session typed; commits the window, so a later
+        correction cannot undo the repair. None when nothing changes or the
+        edit would backspace more than command_max_backspace.
+        """
+        old = self.history
+        if command.scratch:
+            new = self._scratched(old)
+        else:
+            new = self._repaired(old, command)
+        prefix = _common_prefix(old, new)
+        backspace = len(old) - prefix
+        insert = new[prefix:]
+        if backspace > self.command_max_backspace or (not backspace and not insert):
+            return None
+        line = self.committed_text + self.typed_window
+        line = line[:max(0, len(line) - backspace)] + insert
+        self.commit()
+        self.committed_text = line[-self.context_chars:] if self.context_chars > 0 else ""
+        self._set_history(new)
+        return Edit(backspace, insert)
+
+    @staticmethod
+    def _scratched(history):
+        """History without its current sentence (or the one just completed)."""
+        body = history.rstrip()
+        if body.endswith(SENTENCE_END):
+            body = body[:-1]  # the current sentence is empty: take the last one
+        m = _LAST_END.search(body)
+        return history[:m.start() + 1] if m else ""
+
+    def _repaired(self, history, command):
+        """History with a join or comma repair and the chunk's words appended."""
+        base = history
+        end_at = re.search(r"[.?!]\s*$", base)
+        if command.comma:
+            if end_at:
+                base = base[:end_at.start()] + "," + base[end_at.start() + 1:]
+            elif base and not base.rstrip().endswith(","):
+                base = base.rstrip() + ","
+        elif command.end and end_at:
+            base = base[:end_at.start()] + base[end_at.start() + 1:]
+        # The line before the history, as the context for the new words.
+        line = self.committed_text + self.typed_window
+        before = line[:max(0, len(line) - len(history))] + base
+        words = normalise(command.rest, before, self.after_text) if command.rest else ""
+        if command.end:
+            words = words.rstrip().rstrip(".?!,;:") + command.end
+            if self.after_text[:1].isalnum():
+                words += " "
+        return base + words
 
     def set_context(self, before, after=""):
         """Take context from the real line around the cursor (window empty)."""

@@ -132,6 +132,9 @@ class AchatTarget:
     """Types into the prompt line of an `achat run` session in a WezTerm pane."""
 
     name = "achat"
+    # line_context() is the real line, so the controller can check that what
+    # it typed is still exactly before the cursor before rewriting it.
+    exact_line = True
     # A rejected edit means the operator touched the line: commit the window
     # and carry on, instead of giving up on corrections for the session.
     recoverable_rejections = True

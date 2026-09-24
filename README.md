@@ -85,8 +85,22 @@ place (backspace + retype). Press the hotkey again to stop.
   retyping — don't type by hand in the same window while a live session is running,
   or the backspaces can eat your manual edits.
 
+Spoken repairs, for when a thinking pause put a full stop in the middle of a sentence
+(automatic punctuation stays the default; say these only to fix it):
+
+| Say | Where | Effect |
+|---|---|---|
+| "… period" / "full stop" / "question mark" / "exclamation mark" | end of a chunk | join it to the previous chunk (the stray `.` goes, lowercase) and end it so |
+| "comma …" | start of a chunk | the previous `.` becomes `,` and the chunk continues the sentence |
+| "scratch that" | end of a chunk | delete the current sentence (or the one just finished) |
+
+Repairs only ever rewrite what live dictation typed itself, up to
+`live_max_command_backspace` characters. In achat prompts the line must still end with
+exactly that text; elsewhere focus must not have moved. A trailing "period" is always a
+command, so "the trial period" at the very end of a chunk ends the sentence instead.
+
 Config keys: `live_pause_ms`, `live_max_chunk_s`, `live_window_max_s`,
-`live_commit_pause_ms`, `live_max_backspace`, `live_corrections`,
+`live_commit_pause_ms`, `live_max_backspace`, `live_max_command_backspace`, `live_corrections`,
 `live_committed_context_chars`, `live_hotkey`.
 
 ## Configuration

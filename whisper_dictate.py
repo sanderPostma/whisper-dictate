@@ -93,6 +93,7 @@ DEFAULT_CONFIG = {
     "live_window_max_s": 12,
     "live_commit_pause_ms": 1200,
     "live_max_backspace": 80,
+    "live_max_command_backspace": 300,
     "live_corrections": True,
     "live_committed_context_chars": 400,
     "remote_server": {
@@ -930,6 +931,7 @@ class WhisperDictate:
             base_prompt=self.get_asr_context(),
             context_chars=int(cfg.get("live_committed_context_chars", 400)),
             max_backspace=int(cfg.get("live_max_backspace", 80)),
+            command_max_backspace=int(cfg.get("live_max_command_backspace", 300)),
             window_max_s=float(cfg.get("live_window_max_s", 12)),
         )
         fast, correct = self._live_transcribers()
