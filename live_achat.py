@@ -15,6 +15,7 @@ import tempfile
 import time
 
 from live_output import wezterm_focused_pane, xdotool_active_window
+from live_session import Edit, normalise
 
 BUSY_RETRIES = 8
 BUSY_BACKOFF_S = 0.25
@@ -277,3 +278,21 @@ class AchatTarget:
         if xdotool_active_window(self._run) != self.window_id:
             return False
         return wezterm_focused_pane(self._run) == self.pane_id
+
+
+def type_into_line(target, raw):
+    """One-shot dictation into an achat prompt, shaped by the text around the
+    cursor (case, spaces, no full stop before a following word).
+
+    Returns False when the line cannot be read or the words were not typed,
+    so the caller can fall back to typing keystrokes.
+    """
+    context = target.line_context()
+    if context is None:
+        return False
+    text = normalise(raw, *context)
+    if not text:
+        return True
+    if target.send(Edit(0, text)):
+        return True
+    return not target.last_send_dropped

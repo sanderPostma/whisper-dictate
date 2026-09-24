@@ -12,7 +12,7 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from live_achat import (AchatTarget, achat_input_dir, find_session_socket, socket_request,
-                        wezterm_pane_tty)
+                        type_into_line, wezterm_pane_tty)
 from live_output import WezTermTarget, choose_target
 from live_session import Edit
 
@@ -347,6 +347,56 @@ class SendTests(unittest.TestCase):
         t = target(achat)
         self.assertFalse(t.send(Edit(0, " two")))
         self.assertTrue(t.dead)
+
+
+def state(text, cursor=None, rev=20, known=True):
+    return {"ok": True, "rev": rev, "known": known, "text": text,
+            "cursor": len(text) if cursor is None else cursor}
+
+
+class TypeIntoLineTests(unittest.TestCase):
+    """One-shot dictation into an achat prompt: shaped by the text around the cursor."""
+
+    def test_continuing_a_sentence_lowercases_and_spaces(self):
+        achat = FakeAchat(state("This is"), {"ok": True, "rev": 38})
+        self.assertTrue(type_into_line(target(achat), "The full sentence"))
+        self.assertEqual(achat.requests[1]["insert"], " the full sentence")
+        self.assertEqual(achat.requests[1]["expect_rev"], 20)
+
+    def test_after_a_full_stop_keeps_the_capital(self):
+        achat = FakeAchat(state("Done. "), {"ok": True, "rev": 30})
+        type_into_line(target(achat), "Next one")
+        self.assertEqual(achat.requests[1]["insert"], "Next one")
+
+    def test_mid_line_insert(self):
+        achat = FakeAchat(state("His is a test.", cursor=9), {"ok": True, "rev": 30})
+        type_into_line(target(achat), "Quick.")
+        self.assertEqual(achat.requests[1]["insert"], "quick ")
+
+    def test_empty_line_keeps_text_as_is(self):
+        achat = FakeAchat(state(""), {"ok": True, "rev": 30})
+        type_into_line(target(achat), "Hello there")
+        self.assertEqual(achat.requests[1]["insert"], "Hello there")
+
+    def test_unknown_line_is_not_handled(self):
+        achat = FakeAchat(state("", known=False))
+        self.assertFalse(type_into_line(target(achat), "Hello"))
+        self.assertEqual(len(achat.requests), 1)
+
+    def test_typed_after_operator_retry_counts_as_handled(self):
+        achat = FakeAchat(state("This is"), {"ok": False, "error": "conflict", "rev": 21},
+                          state("This is more"), {"ok": True, "rev": 40})
+        self.assertTrue(type_into_line(target(achat), "The end"))
+
+    def test_dropped_text_is_not_handled(self):
+        achat = FakeAchat(state("This is"), {"ok": False, "error": "unknown_line"},
+                          state("", known=False))
+        self.assertFalse(type_into_line(target(achat), "The end"))
+
+    def test_nothing_to_type_is_handled(self):
+        achat = FakeAchat(state("This is"))
+        self.assertTrue(type_into_line(target(achat), " ... "))
+        self.assertEqual(len(achat.requests), 1)
 
 
 class ChooseTargetTests(unittest.TestCase):

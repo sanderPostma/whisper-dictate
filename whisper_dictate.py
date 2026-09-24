@@ -40,6 +40,7 @@ from asr_models import (
     multilingual_model,
 )
 from asr_qwen import load_qwen, transcribe_qwen
+from live_achat import AchatTarget, type_into_line
 from live_controller import LiveController, select_transcribers
 from live_output import choose_target
 from live_segmenter import LiveSegmenter
@@ -309,7 +310,7 @@ class WhisperDictate:
             print(f"[whisper-dictate] Error loading replacements: {e}")
             return {}
     
-    def apply_replacements(self, text):
+    def apply_replacements(self, text, lower_single_word=True):
         """Apply text replacements (case-insensitive matching)."""
         replacements = self.load_replacements()
         print(f"[post-process] IN:  |{text}|")
@@ -342,7 +343,7 @@ class WhisperDictate:
             print(f"[post-process] Removed trailing period")
         
         # Lowercase single words (no spaces)
-        if ' ' not in text.strip():
+        if lower_single_word and ' ' not in text.strip():
             text = text.lower()
             print(f"[post-process] Lowercased single word")
         
@@ -763,8 +764,29 @@ class WhisperDictate:
         finally:
             self.oneshot_transcribing = False
 
+    def _oneshot_achat_target(self):
+        """The `achat run` session in the focused WezTerm pane, if any."""
+        if "wezterm" not in (self.get_focused_window_class() or "").lower():
+            return None
+        try:
+            return AchatTarget.detect()
+        except Exception as e:
+            print(f"[whisper-dictate] achat detection failed: {e}")
+            return None
+
+    def _oneshot_prompt(self, achat_target):
+        """ASR context, plus the text before the cursor in an achat prompt."""
+        base = self.get_asr_context()
+        context = achat_target.line_context() if achat_target else None
+        if not context or not context[0].strip():
+            return base
+        tail = context[0][-int(self.config.get("live_committed_context_chars", 400)):]
+        return "\n".join(p for p in ((base or "").strip(), tail.strip()) if p)
+
     def _transcribe_and_paste_impl(self, audio):
         GLib.idle_add(lambda: self.update_status("Transcribing..."))
+        achat_target = self._oneshot_achat_target()
+        prompt = self._oneshot_prompt(achat_target)
 
         try:
             remote_config = self.get_remote_config()
@@ -779,10 +801,10 @@ class WhisperDictate:
                         f"[whisper-dictate] Remote unavailable, using local fallback model: "
                         f"{local_fallback_model}"
                     )
-                    text = self._transcribe_local(audio, model_name=local_fallback_model)
+                    text = self._transcribe_local(audio, model_name=local_fallback_model, prompt=prompt)
                 else:
                     try:
-                        text = self.transcribe_remote(audio)
+                        text = self.transcribe_remote(audio, prompt=prompt)
                         self.set_remote_available(True)
                     except Exception as e:
                         self.set_remote_available(False, str(e))
@@ -794,9 +816,9 @@ class WhisperDictate:
                             ) and False)
                             return
                         GLib.idle_add(lambda: self.update_status("Remote failed, using local..."))
-                        text = self._transcribe_local(audio, model_name=local_fallback_model)
+                        text = self._transcribe_local(audio, model_name=local_fallback_model, prompt=prompt)
             else:
-                text = self._transcribe_local(audio, model_name=self.config.get("model", "base"))
+                text = self._transcribe_local(audio, model_name=self.config.get("model", "base"), prompt=prompt)
         except Exception as e:
             print(f"[whisper-dictate] Transcription failed: {e}")
             GLib.idle_add(lambda: self.update_status("Ready"))
@@ -806,11 +828,12 @@ class WhisperDictate:
             GLib.idle_add(lambda: self.update_status("Ready"))
             return
         
-        # Apply text replacements
-        text = self.apply_replacements(text)
-        
+        # Apply text replacements. In an achat prompt the line decides case,
+        # so the blunt single-word lowercasing is left out there.
+        text = self.apply_replacements(text, lower_single_word=achat_target is None)
+
         # Output based on mode
-        GLib.idle_add(lambda: self.output_text(text))
+        GLib.idle_add(lambda: self.output_text(text, achat_target=achat_target))
     
     def toggle_live(self, *args):
         """Toggle live dictation (type at pauses, correct recent words)."""
@@ -1298,9 +1321,25 @@ class WhisperDictate:
                 )
             threading.Thread(target=restore, daemon=True).start()
 
-    def output_text(self, text):
+    def output_text(self, text, achat_target=None):
         """Output text based on mode (type/clipboard/both)."""
         mode = self.config.get("output_mode", "type")
+
+        if mode in ("type", "both") and achat_target is not None:
+            # Straight into the agent's prompt line, shaped by the text around
+            # the cursor; falls back to keystrokes if the line can't be used.
+            try:
+                typed = type_into_line(achat_target, text)
+            except Exception as e:
+                print(f"[whisper-dictate] achat typing failed: {e}")
+                typed = False
+            if typed:
+                if mode == "both":
+                    subprocess.run(["xclip", "-selection", "clipboard"],
+                                   input=text.encode(), check=False)
+                self.update_status("Ready")
+                print(f"Transcribed (achat): {text}")
+                return
 
         wclass = (self.get_focused_window_class() or "").lower()
         kitty_target = "kitty" in wclass
