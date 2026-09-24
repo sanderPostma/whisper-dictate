@@ -882,11 +882,18 @@ class WhisperDictate:
 
         self.live_segmenter = segmenter
         self.live_controller = controller
-        self.live_stream = sd.InputStream(
-            samplerate=sample_rate, channels=1, dtype=np.float32,
-            blocksize=int(sample_rate * 0.05), callback=audio_callback,
-        )
-        self.live_stream.start()
+        try:
+            self.live_stream = sd.InputStream(
+                samplerate=sample_rate, channels=1, dtype=np.float32,
+                blocksize=int(sample_rate * 0.05), callback=audio_callback,
+            )
+            self.live_stream.start()
+        except Exception as e:
+            controller.stop()
+            self.live_stream = None
+            self.notify(f"Live dictation: cannot open microphone: {e}")
+            print(f"[whisper-dictate] Live dictation: cannot open microphone: {e}")
+            return
         self.live_active = True
         self.beep_start()
         self.update_icon(True)
