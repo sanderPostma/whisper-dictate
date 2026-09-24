@@ -142,6 +142,14 @@ class LiveControllerTests(unittest.TestCase):
         ctl.correct()
         self.assertEqual(correct.prompts, [])
 
+    def test_recoverable_rejection_commits_but_keeps_corrections(self):
+        target = FakeTarget(ok=False)
+        target.recoverable_rejections = True
+        ctl = self.make(Script("a"), Script(), target=target)
+        ctl.process(chunk(0.0, 1.0))
+        self.assertTrue(ctl.corrections_enabled)
+        self.assertEqual(ctl.session.chunk_count, 0)
+
     def test_long_pause_after_sentence_commits(self):
         ctl = self.make(Script("Done."))
         ctl.process(chunk(0.0, 1.0))

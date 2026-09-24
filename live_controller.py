@@ -162,9 +162,12 @@ class LiveController:
                 return True
         except Exception as e:
             self.log(f"[live] target.send raised: {e}")
-        self.log("[live] output failed; committing window and disabling corrections")
         self.session.commit()
-        self.corrections_enabled = False
+        if getattr(self.target, "recoverable_rejections", False):
+            self.log("[live] edit rejected; committing window")
+        else:
+            self.log("[live] output failed; committing window and disabling corrections")
+            self.corrections_enabled = False
         return False
 
     def _report(self, message):

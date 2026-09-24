@@ -68,12 +68,16 @@ then talk. Text is typed at each pause (~0.6 s). With the remote server up, the 
 ≤ 12 s are re-transcribed after each pause and recently typed words are corrected in
 place (backspace + retype). Press the hotkey again to stop.
 
-- WezTerm: typed into the pane focused at start via `wezterm cli send-text`.
+- WezTerm pane running `achat run`: typed into the agent's prompt line through achat's
+  input-control socket. Every edit is checked against the line's revision, so typing by
+  hand or an incoming nudge is never overwritten: dictation just continues after it.
+  Needs an `achat` build with the input socket; restart old `achat run` sessions.
+- Other WezTerm panes: typed into the pane focused at start via `wezterm cli send-text`.
 - Other windows: `xdotool`.
 - Switching window or pane mid-session freezes what was typed and continues in the
   new place, append-only.
 - The local fallback model types but does not correct.
-- Corrections work by blindly backspacing up to `live_max_backspace` characters and
+- Outside achat, corrections work by blindly backspacing up to `live_max_backspace` characters and
   retyping — don't type by hand in the same window while a live session is running,
   or the backspaces can eat your manual edits.
 

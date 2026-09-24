@@ -120,9 +120,19 @@ class XdotoolTarget:
         return xdotool_active_window(self._run) == self.window_id
 
 
-def choose_target(wm_class, run=subprocess.run):
-    """WezTerm pane target when a WezTerm window is focused, else xdotool."""
+def choose_target(wm_class, run=subprocess.run, achat_detect=None):
+    """Best target for the focused window.
+
+    In WezTerm: the pane's `achat run` input socket when there is one, else
+    the pane itself. Anything else: xdotool.
+    """
     if "wezterm" in (wm_class or "").lower():
+        if achat_detect is None:
+            from live_achat import AchatTarget
+            achat_detect = AchatTarget.detect
+        target = achat_detect(run)
+        if target is not None:
+            return target
         target = WezTermTarget.detect(run)
         if target is not None:
             return target
