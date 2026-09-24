@@ -72,6 +72,12 @@ prompts the move is counted from the known line and sent as arrow keys; other We
 get Alt+B / Alt+F and Ctrl+A / Ctrl+E; other windows Ctrl+Left / Ctrl+Right and Home / End.
 Dictation continues at the new cursor position.
 
+Undo, said as a whole utterance: "command undo" or "undo that". Reverts the last dictation
+step (an utterance, or a repair such as "scratch that"); say it again to go further back.
+Typical use: a word came out wrong, say "undo that" and repeat it. Live mode, and one-shot in
+achat prompts (the line must still end with exactly that text). Enter and cursor moves are
+not undone.
+
 ## Live dictation
 
 Press the dictation hotkey (`<Alt>d`) twice within a second (double beep), or pick

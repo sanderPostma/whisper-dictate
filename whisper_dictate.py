@@ -41,11 +41,11 @@ from asr_models import (
 )
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
-from live_commands import parse_cursor, split_enter
+from live_commands import parse_cursor, parse_undo, split_enter
 from live_controller import LiveController, select_transcribers
 from live_output import WezTermTarget, XdotoolTarget, choose_target
 from live_segmenter import LiveSegmenter
-from live_session import LiveSession, is_slash_command, normalise
+from live_session import Edit, LiveSession, is_slash_command, normalise
 
 # Optional: transformers for distil-whisper models
 try:
@@ -907,6 +907,9 @@ class WhisperDictate:
         # Apply text replacements. Where the line is readable it decides case,
         # so the blunt single-word lowercasing is left out there.
         text = self.apply_replacements(text, lower_single_word=line_source is None)
+        if parse_undo(text):
+            GLib.idle_add(lambda: self._oneshot_undo_last(line_source))
+            return
         move = parse_cursor(text)
         if move is not None:
             GLib.idle_add(lambda: self._oneshot_move(line_source, move))
@@ -1437,6 +1440,31 @@ class WhisperDictate:
         self.update_status("Ready")
         return False
 
+    def _oneshot_undo_last(self, line_source):
+        """Remove the text of the last one-shot dictation into this achat prompt,
+        if the line still ends with exactly that text."""
+        stack = getattr(self, "_oneshot_undo", [])
+        if not isinstance(line_source, AchatTarget):
+            print("[whisper-dictate] one-shot: undo works in achat prompts only")
+        else:
+            mine = [i for i, (sock, _) in enumerate(stack) if sock == line_source.sock_path]
+            if not mine:
+                print("[whisper-dictate] one-shot: nothing to undo here")
+            else:
+                i = mine[-1]
+                text = stack[i][1]
+                context = line_source.line_context()
+                if context is not None and context[0].endswith(text):
+                    ok = line_source.send(Edit(len(text), ""))
+                    print(f"[whisper-dictate] one-shot: undo {text!r} ({'ok' if ok else 'failed'})")
+                    del stack[i]
+                else:
+                    print("[whisper-dictate] one-shot: line changed since; nothing undone")
+                    stack[:] = [e for e in stack if e[0] != line_source.sock_path]
+        self._oneshot_undo = stack
+        self.update_status("Ready")
+        return False
+
     def _oneshot_move(self, line_source, move):
         """A spoken cursor move instead of text."""
         target = line_source if line_source is not None else XdotoolTarget.detect()
@@ -1474,6 +1502,11 @@ class WhisperDictate:
                 print(f"[whisper-dictate] achat typing failed: {e}")
                 typed = False
             if typed:
+                inserted = getattr(achat_target, "last_inserted", None)
+                if inserted:
+                    stack = getattr(self, "_oneshot_undo", [])
+                    stack.append((achat_target.sock_path, inserted))
+                    self._oneshot_undo = stack[-20:]
                 if mode == "both":
                     subprocess.run(["xclip", "-selection", "clipboard"],
                                    input=text.encode(), check=False)

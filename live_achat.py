@@ -149,6 +149,7 @@ class AchatTarget:
         self.rev = rev
         self.dead = False
         self.last_send_dropped = False  # the last send's inserted text never landed
+        self.last_inserted = None  # what the last successful send typed
         self._run = run
         self._request = request
         self._sleep = sleep
@@ -214,6 +215,7 @@ class AchatTarget:
         """Apply the edit. False means the typed window no longer matches the
         line (the operator touched it), so the caller must commit the window."""
         self.last_send_dropped = False
+        self.last_inserted = None
         if not edit.backspace and not edit.insert:
             return True
         insert = _clean_insert(edit.insert)
@@ -228,6 +230,7 @@ class AchatTarget:
                 self.dead = True
                 return False
             self.rev = rev
+            self.last_inserted = insert
             return True
         self._log(f"[live] achat edit rejected: {resp.get('error')}")
         if "rev" in resp:
@@ -252,6 +255,7 @@ class AchatTarget:
             resp = self._edit(0, insert)
             if resp is not None and resp.get("ok"):
                 self.last_send_dropped = False
+                self.last_inserted = insert
                 rev = _rev(resp.get("rev"))
                 if rev is not None:
                     self.rev = rev

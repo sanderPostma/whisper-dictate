@@ -90,6 +90,7 @@ def _common_prefix(a, b):
     return n
 
 
+UNDO_STEPS = 20
 _LAST_END = re.compile(r"[.?!][^.?!]*$")
 
 
@@ -105,6 +106,10 @@ class LiveSession:
         # What this session typed that is still right before the cursor,
         # across commits: the only text a spoken command may rewrite.
         self.history = ""
+        # Snapshots of history before each step (an utterance or a repair),
+        # newest last: "undo" turns history back into the last one.
+        self._undo = []
+        self._window_steps = 0
         self.after_text = ""  # rest of the line after the cursor (mid-line dictation)
         self._chunks = []  # (audio, t0, t1)
         self._pieces = []  # (t1, typed text), in typing order
@@ -132,6 +137,8 @@ class LiveSession:
         if not text:
             return None
         self._pieces.append((t1, text))
+        self._push_undo()
+        self._window_steps += 1
         self._set_history(self.history + text)
         return Edit(0, text)
 
@@ -158,6 +165,10 @@ class LiveSession:
         insert = new[prefix:] + "".join(text for _, text in rest)
         self._pieces = [(t_upto, new)] + rest
         self._set_history(self.history[:max(0, len(self.history) - backspace)] + insert)
+        if self._window_steps > 1:
+            # The corrected window is one step now: undo removes it as corrected.
+            del self._undo[-(self._window_steps - 1):]
+            self._window_steps = 1
         return Edit(backspace, insert)
 
     def should_commit(self, long_pause=False, focus_ok=True, incoming_s=0.0):
@@ -170,17 +181,65 @@ class LiveSession:
         return bool(long_pause and self.typed_window.rstrip().endswith(SENTENCE_END))
 
     def commit(self):
+        self._window_steps = 0
         text = self.committed_text + self.typed_window
         self.committed_text = text[-max(self.context_chars, 1):]
         self._chunks = []
         self._pieces = []
 
     def _set_history(self, text):
-        self.history = text[-max(self.context_chars, self.command_max_backspace):]
+        self.history = text
+        self.trim_history(max(self.context_chars, self.command_max_backspace))
+
+    def _push_undo(self, snapshot=None):
+        self._undo.append(self.history if snapshot is None else snapshot)
+        del self._undo[:-UNDO_STEPS]
+
+    def trim_history(self, keep):
+        """Keep only the last `keep` characters of history as ours to edit.
+
+        Undo snapshots are shifted along; one that does not share the dropped
+        prefix (an older state) is dropped with everything before it, so an
+        undo never retypes text from outside what we may touch.
+        """
+        cut = max(0, len(self.history) - max(0, keep))
+        if not cut:
+            return
+        dropped = self.history[:cut]
+        self.history = self.history[cut:]
+        kept = []
+        for snap in reversed(self._undo):
+            if len(snap) < cut or not snap.startswith(dropped):
+                break
+            kept.append(snap[cut:])
+        self._undo = kept[::-1]
 
     def forget_history(self):
         """The text before the cursor is no longer known to be ours."""
         self.history = ""
+        self._undo = []
+
+    def undo(self):
+        """Turn history back into what it was before the last step.
+
+        One edit over our own text, like a command; commits the window.
+        None when there is no step to undo or the edit would be too long.
+        """
+        if not self._undo:
+            return None
+        line = self.committed_text + self.typed_window
+        self.commit()
+        old, new = self.history, self._undo[-1]
+        prefix = _common_prefix(old, new)
+        backspace = len(old) - prefix
+        if backspace > self.command_max_backspace:
+            return None
+        self._undo.pop()
+        insert = new[prefix:]
+        line = line[:max(0, len(line) - backspace)] + insert
+        self.committed_text = line[-self.context_chars:] if self.context_chars > 0 else ""
+        self.history = new
+        return Edit(backspace, insert) if backspace or insert else None
 
     def apply_command(self, command):
         """Apply a spoken repair (see live_commands) as one edit over the history.
@@ -208,6 +267,7 @@ class LiveSession:
             return None
         line = line[:max(0, len(line) - backspace)] + insert
         self.committed_text = line[-self.context_chars:] if self.context_chars > 0 else ""
+        self._push_undo(old)
         self._set_history(new)
         return Edit(backspace, insert)
 

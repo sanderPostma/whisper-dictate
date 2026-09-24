@@ -548,6 +548,39 @@ class CursorMoveTests(unittest.TestCase):
         self.assertEqual(len(target.edits), 2)  # the command itself typed nothing
 
 
+class UndoControllerTests(unittest.TestCase):
+    def make(self, fast, target):
+        return LiveController(LiveSession(), target, fast, None, log=lambda *_: None)
+
+    def test_undo_then_say_it_again(self):
+        target = LineTextTarget("")
+        ctl = self.make(Script("Fix the login.", "Deploy the fricking.", "Undo that.", "Deploy the fix."), target)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.process(chunk(1.0, 2.0))
+        target.line = "Fix the login. Deploy the fricking."
+        ctl.process(chunk(2.0, 3.0))
+        self.assertEqual(target.edits[-1], Edit(21, ""))
+        target.line = "Fix the login."
+        ctl.process(chunk(3.0, 4.0))
+        self.assertEqual(target.edits[-1], Edit(0, " Deploy the fix."))
+
+    def test_undo_refused_when_the_exact_line_changed(self):
+        target = LineTextTarget("")
+        target.exact_line = True
+        ctl = self.make(Script("Fix the login.", "Command undo."), target)
+        ctl.process(chunk(0.0, 1.0))
+        target.line = "Fix the login. and mine"
+        ctl.process(chunk(1.0, 2.0))
+        self.assertEqual(len(target.edits), 1)
+
+    def test_nothing_to_undo_after_enter(self):
+        target = EnterTarget()
+        ctl = self.make(Script("Do it.", "Press enter.", "Undo that."), target)
+        for i in range(3):
+            ctl.process(chunk(float(i), i + 1.0))
+        self.assertEqual(target.log, [Edit(0, "Do it."), "ENTER"])
+
+
 class SelectTranscribersTests(unittest.TestCase):
     def setUp(self):
         self.down = False

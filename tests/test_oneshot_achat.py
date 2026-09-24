@@ -130,6 +130,42 @@ class OneShotCursorTests(unittest.TestCase):
         run.assert_not_called()
 
 
+class OneShotUndoTests(unittest.TestCase):
+    def source(self, line):
+        target = FakeAchatSource()
+        target.sock_path = "/x.sock"
+        target.last_inserted = None
+        target.sent = []
+        target.line_context = lambda adopt_rev=True: (line[0], "")
+        target.send = lambda edit: target.sent.append(edit) or True
+        return target
+
+    def test_undo_removes_the_last_one_shot_text(self):
+        a = app()
+        a._oneshot_undo = [("/x.sock", " the full sentence")]
+        target = self.source(["This is the full sentence"])
+        with mock.patch("builtins.print"):
+            a._oneshot_undo_last(target)
+        self.assertEqual(target.sent, [whisper_dictate.Edit(18, "")])
+        self.assertEqual(a._oneshot_undo, [])
+
+    def test_undo_refused_when_the_line_moved_on(self):
+        a = app()
+        a._oneshot_undo = [("/x.sock", " the full sentence")]
+        target = self.source(["This is the full sentence and more"])
+        with mock.patch("builtins.print"):
+            a._oneshot_undo_last(target)
+        self.assertEqual(target.sent, [])
+        self.assertEqual(a._oneshot_undo, [])
+
+    def test_undo_outside_achat_does_nothing(self):
+        a = app()
+        a._oneshot_undo = [("/x.sock", "abc")]
+        with mock.patch.object(whisper_dictate.subprocess, "run") as run, mock.patch("builtins.print"):
+            a._oneshot_undo_last(None)
+        run.assert_not_called()
+
+
 class LivePostprocessTests(unittest.TestCase):
     def test_live_corrections_do_not_retype_the_whole_window(self):
         # One-shot tidying ("Okay." -> "okay") made the fast pass and the

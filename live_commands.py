@@ -172,3 +172,15 @@ def word_target(text, cursor, move):
             while i < len(text) and _is_word(text[i]):
                 i += 1
     return i
+
+
+# --- Undo ("command undo", "undo that") ------------------------------------
+
+_UNDO_RE = re.compile(
+    r"^\s*(?:command[\s,]+(?:undo|and\s+do)|undo[\s,]+that)[\s.!,]*$", re.IGNORECASE)
+
+
+def parse_undo(text):
+    """Whether the whole utterance is an undo ("command undo", "undo that").
+    "command and do" is how the model tends to write "command undo"."""
+    return bool(_UNDO_RE.match(text or ""))

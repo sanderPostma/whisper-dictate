@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-from live_commands import Command, mentions_command, parse_command, parse_cursor
+from live_commands import Command, mentions_command, parse_command, parse_cursor, parse_undo
 from live_segmenter import ChunkReady, LongPause
 
 _STOP = object()
@@ -134,6 +134,13 @@ class LiveController:
             self._report(f"Live transcription failed: {e}")
             return
         text = self.postprocess(raw or "")
+        if parse_undo(text):
+            self._verify_history()
+            edit = self.session.undo()
+            self.log(f"[live] undo raw={raw!r} -> {_show(edit)}")
+            if edit is not None:
+                self._send(edit)
+            return
         move = parse_cursor(text)
         if move is not None:
             self._run_move(move, raw)
@@ -259,7 +266,10 @@ class LiveController:
         line_context = getattr(self.target, "line_context", None)
         if line_context is None:
             window = s.typed_window
-            s.history = s.history[-len(window):] if window else ""
+            if window:
+                s.trim_history(len(window))
+            else:
+                s.forget_history()
             return
         exact = getattr(self.target, "exact_line", False)
         try:
