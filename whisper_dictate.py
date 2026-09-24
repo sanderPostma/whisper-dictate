@@ -780,10 +780,17 @@ class WhisperDictate:
         if "wezterm" not in (self.get_focused_window_class() or "").lower():
             return None
         try:
-            return AchatTarget.detect()
+            target = AchatTarget.detect()
         except Exception as e:
             print(f"[whisper-dictate] achat detection failed: {e}")
             return None
+        if target is None:
+            print("[whisper-dictate] one-shot: no achat input socket for the focused pane "
+                  "(not under `achat run`, or an achat build without the socket); typing keys")
+        else:
+            print(f"[whisper-dictate] one-shot: achat session {target.sock_path} "
+                  f"(pane {target.pane_id})")
+        return target
 
     def _oneshot_prompt(self, achat_target):
         """ASR context, plus the text before the cursor in an achat prompt."""
