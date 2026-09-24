@@ -199,6 +199,49 @@ class LiveControllerTests(unittest.TestCase):
         self.assertEqual(self.target.edits, [Edit(0, "Hello")])
         self.assertEqual(self.done, [True])
 
+    def test_target_send_raises_disables_corrections(self):
+        class RaisingTarget(FakeTarget):
+            def send(self, edit):
+                raise RuntimeError("target send crashed")
+
+        ctl = self.make(Script("a"), target=RaisingTarget())
+        ctl.process(chunk(0.0, 1.0))
+        self.assertFalse(ctl.corrections_enabled)
+        self.assertEqual(ctl.session.chunk_count, 0)
+
+    def test_on_done_called_even_if_commit_raises(self):
+        class RaisingSession:
+            def commit(self):
+                raise RuntimeError("commit failed")
+            def add_chunk(self, audio, t0, t1):
+                pass
+            def should_commit(self, **kwargs):
+                return False
+            def fast_prompt(self):
+                return ""
+            def add_fast_result(self, t1, text):
+                return Edit(0, text)
+            def window_audio(self):
+                return None, 0
+            def correction_prompt(self):
+                return ""
+            def apply_correction(self, t_upto, text):
+                return None
+            chunk_count = 0
+            piece_count = 1
+
+        done = []
+        target = FakeTarget()
+        ctl = LiveController(
+            RaisingSession(), target, Script("a"),
+            on_done=lambda: done.append(True),
+            log=lambda *_: None,
+        )
+        ctl.submit(chunk(0.0, 1.0))
+        ctl.stop()
+        ctl.run_until_stopped()
+        self.assertEqual(done, [True])
+
 
 class SelectTranscribersTests(unittest.TestCase):
     def setUp(self):

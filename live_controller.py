@@ -136,12 +136,17 @@ class LiveController:
 
     def finish(self):
         try:
-            self.correct()
-        except Exception as e:
-            self.log(f"[live] final correction failed: {e}")
-        self.session.commit()
-        if self.on_done:
-            self.on_done()
+            try:
+                self.correct()
+            except Exception as e:
+                self.log(f"[live] final correction failed: {e}")
+            try:
+                self.session.commit()
+            except Exception as e:
+                self.log(f"[live] final commit failed: {e}")
+        finally:
+            if self.on_done:
+                self.on_done()
 
     def _retarget(self):
         """Focus moved: freeze the window and follow the new focus, append-only."""
@@ -152,8 +157,11 @@ class LiveController:
                 self.target = new
 
     def _send(self, edit):
-        if self.target.send(edit):
-            return True
+        try:
+            if self.target.send(edit):
+                return True
+        except Exception as e:
+            self.log(f"[live] target.send raised: {e}")
         self.log("[live] output failed; committing window and disabling corrections")
         self.session.commit()
         self.corrections_enabled = False
