@@ -56,6 +56,24 @@ class NormaliseTests(unittest.TestCase):
             "today please",
         )
 
+    def test_strip_echo_drops_a_whole_repeat_of_the_context(self):
+        # Seen live: a noise chunk came back as the entire prompt context.
+        context = ("Testing live dictation now. This is the second sentence.  "
+                   "And now I want to. Test more. Test some more.")
+        raw = ("Testing live dictation now. This is the second sentence. "
+               "And now I want to. Test more. Test some more.")
+        self.assertEqual(strip_echo(raw, context), "")
+        self.assertEqual(normalise(raw, context), "")
+
+    def test_strip_echo_keeps_what_follows_a_repeat(self):
+        context = "we should merge the branch today"
+        self.assertEqual(strip_echo("so we should merge the branch today and ship", context),
+                         "and ship")
+
+    def test_strip_echo_mid_raw_needs_four_words(self):
+        self.assertEqual(strip_echo("I said the branch today", "merge the branch today"),
+                         "I said the branch today")
+
     def test_strip_echo_ignores_short_overlap(self):
         self.assertEqual(strip_echo("the branch", "merge the branch"), "the branch")
 

@@ -20,14 +20,25 @@ class Edit:
     insert: str
 
 
-def strip_echo(raw, context, max_words=8, min_words=3):
-    """Drop a repeat of the context's last words from the start of raw."""
+def strip_echo(raw, context, max_words=8, min_words=3, min_words_inside=4):
+    """Drop a repeat of the context from raw.
+
+    The model sometimes repeats the end of its prompt before the new words,
+    or (on a chunk with no real speech) returns the whole prompt. A repeat of
+    the context's last words at the start of raw, or of at least
+    `min_words_inside` of them anywhere in raw, is dropped with everything
+    before it.
+    """
     words = context.split()
-    low = raw.lower()
+    low = " ".join(raw.split()).lower()
+    raw = " ".join(raw.split())
     for n in range(min(max_words, len(words)), min_words - 1, -1):
         tail = " ".join(words[-n:]).lower()
         if low.startswith(tail):
             return raw[len(tail):].lstrip(" ,")
+        at = low.rfind(tail) if n >= min_words_inside else -1
+        if at >= 0:
+            return raw[at + len(tail):].lstrip(" ,")
     return raw
 
 
