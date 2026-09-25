@@ -581,6 +581,21 @@ class UndoControllerTests(unittest.TestCase):
         self.assertEqual(target.log, [Edit(0, "Do it."), "ENTER"])
 
 
+class ClearLineControllerTests(unittest.TestCase):
+    def test_clear_line_then_start_fresh(self):
+        cleared = []
+        target = FakeTarget()
+        target.clear_line = lambda: cleared.append(True) or True
+        ctl = LiveController(LiveSession(), target, Script("Fix the bug.", "Command clear line.", "New start"),
+                             None, log=lambda *_: None)
+        for i in range(3):
+            ctl.process(chunk(float(i), i + 1.0))
+        self.assertEqual(cleared, [True])
+        self.assertEqual(target.edits[-1], Edit(0, "New start"))
+        self.assertEqual(ctl.session.undo(), Edit(9, ""))  # the new step only
+        self.assertIsNone(ctl.session.undo())  # nothing from before the clear
+
+
 class SelectTranscribersTests(unittest.TestCase):
     def setUp(self):
         self.down = False

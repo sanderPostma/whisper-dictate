@@ -38,7 +38,20 @@ _COMMA_RE = re.compile(r"^\s*(?:comma(?:\s*[,.;:]+\s*|\s*$)|,\s*)", re.IGNORECAS
 _ENTER_RE = re.compile(r"(^|[,.;:!?]\s*|\s+)press\s+(?:enter|return)[\s.?!,]*$", re.IGNORECASE)
 _ENTER_ALONE_RE = re.compile(r"^\s*(?:enter|return)[\s.?!,]*$", re.IGNORECASE)
 _FILLER = {"no", "oh", "okay", "ok", "um", "uh", "hmm", "ah", "well", "wait", "sorry", "yeah", "so"}
-_SCRATCH_RE = re.compile(r"(?:^|[\s,.?!]+)scratch\s+that[\s.?!,]*$", re.IGNORECASE)
+# "stretch" is how the model tends to hear "scratch".
+_SCRATCH_RE = re.compile(r"(?:^|[\s,.?!]+)(?:scratch|stretch)\s+that[\s.?!,]*$", re.IGNORECASE)
+_SCRATCH_ALONE_RE = re.compile(r"^\s*(?:scratch|stretch)[\s.?!,]*$", re.IGNORECASE)
+_CLEAR_RE = re.compile(
+    r"^\s*(?:command[\s,]+clear(?:[\s,]+(?:the[\s,]+)?line)?"
+    r"|(?:scratch|stretch)[\s,]+(?:all|everything|(?:the[\s,]+)?whole[\s,]+line))[\s.!,]*$",
+    re.IGNORECASE,
+)
+
+
+def parse_clear(text):
+    """Whether the whole utterance asks to clear the whole line
+    ("command clear", "command clear line", "scratch all", "scratch whole line")."""
+    return bool(_CLEAR_RE.match(text or ""))
 
 
 @dataclass(frozen=True)
@@ -67,7 +80,7 @@ def split_enter(text):
 
 
 _SET_OFF_RE = re.compile(
-    r"(?:^|[,.;:!?])\s*(?:" + "|".join(k.replace(" ", r"\s+") for k in (*_END_WORDS, "comma", "scratch that", "press enter", "press return"))
+    r"(?:^|[,.;:!?])\s*(?:" + "|".join(k.replace(" ", r"\s+") for k in (*_END_WORDS, "comma", "scratch that", "stretch that", "press enter", "press return"))
     + r")\s*(?:[,.;:!?]|$)",
     re.IGNORECASE,
 )
@@ -82,6 +95,8 @@ def mentions_command(text):
 def parse_command(text):
     """The spoken command in a chunk's text, or None for plain dictation."""
     text = (text or "").strip()
+    if _SCRATCH_ALONE_RE.match(text):
+        return Command(scratch=True)
     m = _SCRATCH_RE.search(text)
     if m:
         rest = text[:m.start()].strip(" ,.")

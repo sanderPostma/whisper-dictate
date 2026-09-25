@@ -21,6 +21,8 @@ from live_session import Edit, normalise
 BUSY_RETRIES = 8
 BUSY_BACKOFF_S = 0.25
 ENTER_SETTLE_S = 0.15
+CLEAR_POLLS = 10
+CLEAR_POLL_S = 0.1
 
 
 def _rev(value):
@@ -279,6 +281,42 @@ class AchatTarget:
         if steps == 0:
             return True
         return self._keys((b"\x1b[C" if steps > 0 else b"\x1b[D") * abs(steps))
+
+    def clear_line(self):
+        """Delete the whole prompt line, as the operator asked: arrows to the
+        end, then one compare-and-swap edit over exactly the known line, so
+        nothing typed in between is deleted unseen."""
+        state = self._call({"op": "state"})
+        if not isinstance(state, dict) or not state.get("ok") or not state.get("known"):
+            return False
+        text = state.get("text") or ""
+        cursor = state.get("cursor")
+        if not isinstance(cursor, int):
+            return False
+        if cursor < len(text) and not self._keys(b"\x1b[C" * (len(text) - cursor)):
+            return False
+        # The arrows reach achat through the terminal: wait until it has them.
+        for _ in range(CLEAR_POLLS):
+            state = self._call({"op": "state"})
+            if isinstance(state, dict) and state.get("cursor") == len(text):
+                break
+            self._sleep(CLEAR_POLL_S)
+        if (not isinstance(state, dict) or not state.get("ok") or not state.get("known")
+                or state.get("text") != text or state.get("cursor") != len(text)):
+            self._log("[live] clear: the line changed while moving to its end; left alone")
+            return False
+        rev = _rev(state.get("rev"))
+        if rev is None:
+            return False
+        if not text:
+            self.rev = rev
+            return True
+        self.rev = rev
+        resp = self._edit(len(text), "")
+        if resp is not None and resp.get("ok") and _rev(resp.get("rev")) is not None:
+            self.rev = resp["rev"]
+            return True
+        return False
 
     def _keys(self, data):
         try:

@@ -112,7 +112,8 @@ Spoken repairs, for when a thinking pause put a full stop in the middle of a sen
 |---|---|---|
 | "… period" / "full stop" / "question mark" / "exclamation mark" | end of a chunk | join it to the previous chunk (the stray `.` goes, lowercase) and end it so |
 | "comma …" | start of a chunk | the previous `.` becomes `,` and the chunk continues the sentence |
-| "scratch that" | end of a chunk | delete the current sentence (or the one just finished) |
+| "scratch that" (also heard as "stretch that"; or "scratch" alone) | end of a chunk | delete the current sentence (or the one just finished) |
+| "command clear", "command clear line", "scratch all", "scratch whole line" | whole utterance | clear the whole input line, typed text included (achat and WezTerm panes) |
 | "… press enter" / "press return", or "enter" said alone | end of a chunk | type the words, then press Enter (submit) |
 
 Say the command words as their own piece, with a short pause before them ("… test more —

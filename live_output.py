@@ -133,6 +133,10 @@ class WezTermTarget:
     def press_enter(self):
         return self.send_keys(b"\r")
 
+    def clear_line(self):
+        """Readline: Ctrl+E to the end, Ctrl+U to kill back to the start."""
+        return self.send_keys(b"\x05\x15")
+
     def move_cursor(self, move):
         """Readline keys: Alt+B / Alt+F per word, Ctrl+A / Ctrl+E for the ends."""
         if move.kind == "start":

@@ -41,7 +41,7 @@ from asr_models import (
 )
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
-from live_commands import parse_cursor, parse_undo, split_enter
+from live_commands import parse_clear, parse_cursor, parse_undo, split_enter
 from live_controller import LiveController, select_transcribers
 from live_output import WezTermTarget, XdotoolTarget, choose_target
 from live_segmenter import LiveSegmenter
@@ -907,6 +907,9 @@ class WhisperDictate:
         # Apply text replacements. Where the line is readable it decides case,
         # so the blunt single-word lowercasing is left out there.
         text = self.apply_replacements(text, lower_single_word=line_source is None)
+        if parse_clear(text):
+            GLib.idle_add(lambda: self._oneshot_clear(line_source))
+            return
         if parse_undo(text):
             GLib.idle_add(lambda: self._oneshot_undo_last(line_source))
             return
@@ -1437,6 +1440,14 @@ class WhisperDictate:
                 ok = subprocess.run(["xdotool", "key", "--clearmodifiers", "Return"],
                                     check=False).returncode == 0
             print(f"[whisper-dictate] one-shot: Enter pressed ({'ok' if ok else 'failed'})")
+        self.update_status("Ready")
+        return False
+
+    def _oneshot_clear(self, line_source):
+        """Clear the whole prompt line (achat or WezTerm panes only)."""
+        clear = getattr(line_source, "clear_line", None)
+        ok = clear() if clear is not None else False
+        print(f"[whisper-dictate] one-shot: clear line ({'ok' if ok else 'not supported here'})")
         self.update_status("Ready")
         return False
 

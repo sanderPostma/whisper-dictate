@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-from live_commands import Command, mentions_command, parse_command, parse_cursor, parse_undo
+from live_commands import Command, mentions_command, parse_clear, parse_command, parse_cursor, parse_undo
 from live_segmenter import ChunkReady, LongPause
 
 _STOP = object()
@@ -134,6 +134,9 @@ class LiveController:
             self._report(f"Live transcription failed: {e}")
             return
         text = self.postprocess(raw or "")
+        if parse_clear(text):
+            self._run_clear(raw)
+            return
         if parse_undo(text):
             self._verify_history()
             edit = self.session.undo()
@@ -213,6 +216,16 @@ class LiveController:
             new = self.make_target()
             if new is not None:
                 self.target = new
+
+    def _run_clear(self, raw):
+        """Clear the whole line, as the operator asked; start fresh after."""
+        self.session.commit()
+        self.session.forget_history()
+        clear = getattr(self.target, "clear_line", None)
+        ok = clear() if clear is not None else False
+        self.log(f"[live] clear line raw={raw!r} ({'ok' if ok else 'not cleared'})")
+        if ok:
+            self.session.set_context("", "")
 
     def _run_move(self, move, raw):
         """A spoken cursor move: nothing typed before it may be rewritten after

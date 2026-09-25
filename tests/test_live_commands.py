@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from live_commands import Command, mentions_command, parse_command
+from live_commands import Command, mentions_command, parse_clear, parse_command
 
 
 class ParseCommandTests(unittest.TestCase):
@@ -86,6 +86,21 @@ class ParseCommandTests(unittest.TestCase):
     def test_period_then_press_enter(self):
         self.assertEqual(parse_command("Test more. Period. Press enter."),
                          Command(rest="Test more", end=".", enter=True))
+
+    def test_stretch_that_is_how_the_model_hears_scratch_that(self):
+        self.assertEqual(parse_command("Stretch that."), Command(scratch=True))
+        self.assertEqual(parse_command("Scratch."), Command(scratch=True))
+        self.assertEqual(parse_command("Stretch."), Command(scratch=True))
+        self.assertIsNone(parse_command("Stretch the budget."))
+
+    def test_clear_line_forms(self):
+        for text in ("Command clear.", "Command clear line.", "command, clear the line", "Scratch all.",
+                     "Stretch all.", "Scratch whole line.", "Scratch the whole line"):
+            self.assertTrue(parse_clear(text), text)
+
+    def test_clear_line_is_not_text(self):
+        for text in ("Clear the line.", "The command clears the line", "scratch all the tests"):
+            self.assertFalse(parse_clear(text), text)
 
     def test_scratch_that_mid_chunk_is_text(self):
         self.assertIsNone(parse_command("scratch that itch"))

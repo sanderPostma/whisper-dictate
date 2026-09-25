@@ -105,5 +105,48 @@ class TargetMoveTests(unittest.TestCase):
         self.assertEqual(run.calls[-1][0], ["xdotool", "key", "--clearmodifiers", "End"])
 
 
+class ClearLineTests(unittest.TestCase):
+    def test_achat_moves_to_the_end_then_deletes_exactly_the_known_line(self):
+        from live_achat import AchatTarget
+        run = Run()
+        states = [
+            {"ok": True, "rev": 4, "known": True, "text": "fix the bug", "cursor": 4},
+            {"ok": True, "rev": 11, "known": True, "text": "fix the bug", "cursor": 11},
+        ]
+        requests = []
+
+        def request(sock, payload):
+            requests.append(payload)
+            if payload["op"] == "state":
+                return states.pop(0)
+            return {"ok": True, "rev": 22}
+
+        t = AchatTarget(7, "42", "/x.sock", 4, run=run, request=request,
+                        sleep=lambda s: None, log=lambda *_: None)
+        self.assertTrue(t.clear_line())
+        self.assertEqual(run.calls[-1][1]["input"], b"\x1b[C" * 7)
+        self.assertEqual(requests[-1], {"op": "edit", "expect_rev": 11, "backspace": 11,
+                                        "insert": "", "at_cursor": True})
+
+    def test_achat_unknown_line_is_left_alone(self):
+        from live_achat import AchatTarget
+        run = Run()
+        t = AchatTarget(7, "42", "/x.sock", 4, run=run,
+                        request=lambda s, p: {"ok": True, "rev": 4, "known": False, "text": "", "cursor": 0},
+                        sleep=lambda s: None, log=lambda *_: None)
+        self.assertFalse(t.clear_line())
+        self.assertEqual(run.calls, [])
+
+    def test_wezterm_end_then_kill_to_start(self):
+        from live_output import WezTermTarget
+        run = Run()
+        WezTermTarget(7, "42", run).clear_line()
+        self.assertEqual(run.calls[-1][1]["input"], b"\x05\x15")
+
+    def test_xdotool_has_no_clear(self):
+        from live_output import XdotoolTarget
+        self.assertFalse(hasattr(XdotoolTarget("42", Run()), "clear_line"))
+
+
 if __name__ == "__main__":
     unittest.main()
