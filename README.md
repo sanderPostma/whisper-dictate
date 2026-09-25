@@ -95,8 +95,11 @@ that, ...), your `ticket_keys` and your `vocabulary` list (e.g. `["Sphereon", "a
 Qwen prefers those spellings. A misheard word already typed on the line is sent as context
 too and tends to come back when you repeat yourself: say "undo that" first, then say it again.
 
-Slash commands: "slash clear" types `/clear`, also when heard as "flash clear", "splash
-clear" or "less clear" (the whole utterance, and only for commands in `slash_commands`).
+Slash commands: an utterance starting with "slash" (or as misheard: "flash", "splash",
+"dash") types a slash command: "Dash compact." → `/compact`, "Flash review the branch" →
+`/review the branch`. A command from `slash_commands` said as two words is joined ("slash run
+book" → `/runbook`). "Less clear." and a written "-clear" only count as the whole utterance
+with a command from `slash_commands`, so "Less clear than before" stays text.
 
 Shell commands: an utterance that starts with a command from `shell_commands` is typed as a
 command line: lower case, no punctuation, spoken flags written. "L s minus L." → `ls -l`,

@@ -19,10 +19,27 @@ class SlashCommandFixTests(unittest.TestCase):
         self.assertEqual(self.fix("Splash compact"), "/compact")
         self.assertEqual(self.fix("Slash new."), "/new")
 
+    def test_slash_word_at_the_start_before_any_word(self):
+        self.assertEqual(self.fix("Dash compact."), "/compact")
+        self.assertEqual(self.fix("Flash review the branch."), "/review the branch.")
+        self.assertEqual(self.fix("Dash, runbook."), "/runbook")
+        self.assertEqual(self.fix("Slash Rumbuk."), "/rumbuk")
+
+    def test_split_known_command_joined(self):
+        self.assertEqual(self.fix("Slash run book."), "/runbook")
+        self.assertEqual(self.fix("Dash run book for the deploy"), "/runbook for the deploy")
+        self.assertEqual(self.fix("Slash run the tests"), "/run the tests")
+
+    def test_model_dash_before_a_known_command(self):
+        self.assertEqual(self.fix("-compact."), "/compact")
+        self.assertEqual(self.fix("- clear"), "/clear")
+        self.assertEqual(self.fix("- item one"), "- item one")
+
     def test_other_text_untouched(self):
         self.assertEqual(self.fix("Less clear than before."), "Less clear than before.")
-        self.assertEqual(self.fix("Flash beer."), "Flash beer.")
         self.assertEqual(self.fix("a splash command"), "a splash command")
+        self.assertEqual(self.fix("VDX dash 283"), "VDX dash 283")
+        self.assertEqual(self.fix("Dash."), "Dash.")
 
 
 class MisheardCommandWordTests(unittest.TestCase):

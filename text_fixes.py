@@ -215,18 +215,32 @@ DEFAULT_SLASH_COMMANDS = [
     "clear", "compact", "new", "help", "model", "review", "resume", "init", "status",
     "config", "cost", "memory", "context", "agents", "permissions", "doctor", "exit",
     "rewind", "export", "hooks", "mcp", "plugin", "usage", "login", "logout", "fast",
+    "runbook",
 ]
-# How the model hears "slash" at the start of an utterance.
-_SLASH_WORDS = ("slash", "splash", "flash", "slush", "less", "/")
-_SLASH_RE = re.compile(
-    r"^\s*(?:" + "|".join(re.escape(w) for w in _SLASH_WORDS) + r")\s*([A-Za-z][\w-]*)[\s.!?,]*$",
-    re.IGNORECASE)
+# How the model hears "slash" at the start of an utterance: before any word...
+_SLASH_WORDS = ("slash", "splash", "flash", "slush", "dash")
+# ...and, being ordinary text too, only before a known command.
+_SLASH_WORDS_KNOWN = ("less", "/", "-", "\u2013")
+_SLASH_START_RE = re.compile(
+    r"^\s*(?:(" + "|".join(_SLASH_WORDS) + r")\b|(" + "|".join(re.escape(w) for w in _SLASH_WORDS_KNOWN)
+    + r"))[\s,]*([A-Za-z][\w-]*)(.*)$", re.IGNORECASE | re.DOTALL)
 
 
 def fix_slash_command(text, commands):
-    """"Flash clear." -> "/clear": only a whole utterance of a slash word and a
-    known command, so "Less clear than before" stays text."""
-    m = _SLASH_RE.match(text or "")
-    if m and m.group(1).lower() in {c.lower().lstrip("/") for c in commands or ()}:
-        return "/" + m.group(1).lower()
-    return text
+    """A slash command spoken at the start of an utterance: "Dash compact." ->
+    "/compact", "Flash review the branch" -> "/review the branch". "less" and a
+    written "-" only count as the whole utterance with a known command ("Less
+    clear than before" stays text)."""
+    m = _SLASH_START_RE.match(text or "")
+    if not m:
+        return text
+    word, rest = m.group(3).lower(), m.group(4)
+    known = {c.lower().lstrip("/") for c in commands or ()}
+    split = re.match(r"\s+([A-Za-z]+)\b", rest)
+    if split and word not in known and word + split.group(1).lower() in known:
+        word, rest = word + split.group(1).lower(), rest[split.end():]  # "run book"
+    if not rest.strip(" .!?,"):
+        rest = ""  # "/compact." -> "/compact"
+    if m.group(2) and (rest or word not in known):
+        return text
+    return "/" + word + rest
