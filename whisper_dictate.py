@@ -237,6 +237,7 @@ class WhisperDictate:
         then the spoken command words, ticket keys and `vocabulary`."""
         words = [*COMMAND_VOCABULARY, *self.config.get("ticket_keys", []),
                  *self.config.get("vocabulary", [])]
+        words = list(dict.fromkeys(w for w in words if w and w.strip()))
         parts = [context_from_config(self.config, CONFIG_DIR), "Vocabulary: " + ", ".join(words) + "."]
         return "\n".join(p for p in parts if p and p.strip())
 
