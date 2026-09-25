@@ -139,6 +139,11 @@ hotkey stops live dictation. `live_double_press_s` sets the window (default 1.0 
   needs an achat build whose `edit` supports `at_cursor`.
   Needs an `achat` build with the input socket; restart old `achat run` sessions.
 - Other WezTerm panes: typed into the pane focused at start via `wezterm cli send-text`.
+  The text before the cursor is read off the screen: in a Claude Code style input box (the
+  `❯` row between two rules) the box itself, greyed-out placeholders left out; elsewhere the
+  terminal's cursor row. It is read again after every long pause, so a line you submitted
+  by hand starts fresh (no leading space). A new window without a readable line starts
+  fresh too.
 - Other windows: `xdotool`.
 - Switching window or pane mid-session freezes what was typed and continues in the
   new place, append-only.

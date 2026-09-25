@@ -5,6 +5,7 @@ reports whether that is still where the operator is working.
 """
 
 import json
+import re
 import subprocess
 import unicodedata
 
@@ -82,6 +83,77 @@ def _cells(ch):
     return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
 
 
+_SGR = re.compile(r"\x1b\[([0-9;:]*)m|\x1b\([0-9A-Za-z]|\x1b\[[0-9;?]*[A-Za-z]")
+_RULE = "\u2500"
+_PROMPT = "\u276f"
+
+
+def _visible(row):
+    """(all text, text not drawn muted) of one row with escapes.
+
+    Muted: dim, or the grey Claude Code uses for placeholders and hints."""
+    plain, typed, muted = [], [], False
+    pos = 0
+    for m in _SGR.finditer(row):
+        chunk = row[pos:m.start()]
+        plain.append(chunk)
+        if not muted:
+            typed.append(chunk)
+        pos = m.end()
+        params = m.group(1)
+        if params is None:
+            continue
+        parts = params.replace(":", ";").split(";") if params else ["0"]
+        if params in ("", "0", "39", "22") or params.startswith(("0;", "39;")):
+            muted = False
+        if "2" == parts[0] or params.startswith("0;2") or params.startswith("38;2;;153;153;153") \
+                or params.startswith("38:2::153:153:153"):
+            muted = True
+        elif params.startswith("38") and not params.startswith(("38:2::153", "38;2;;153")):
+            muted = False
+    plain.append(row[pos:])
+    if not muted:
+        typed.append(row[pos:])
+    return "".join(plain), "".join(typed)
+
+
+def claude_input_before(screen, cursor_x, cursor_y):
+    """Text before the cursor in a Claude Code style input box, or None.
+
+    The box is the last "❯" row right under a full-width rule, down to the
+    next rule. Its text is read off the screen (placeholders left out), so
+    it does not depend on the terminal's cursor, which such TUIs park
+    anywhere. The cursor only counts when it sits inside the box.
+    """
+    rows = [_visible(r.rstrip("\r")) for r in (screen or "").split("\n")]
+    is_rule = [len(p.strip()) >= 20 and set(p.strip()) == {_RULE} for p, _ in rows]
+    for top in range(len(rows) - 2, -1, -1):
+        if not is_rule[top] or not rows[top + 1][0].lstrip().startswith(_PROMPT):
+            continue
+        bottom = next((i for i in range(top + 2, len(rows)) if is_rule[i]), None)
+        if bottom is None:
+            continue
+        parts = []
+        for i in range(top + 1, bottom):
+            plain, typed = rows[i]
+            at_cursor = top < cursor_y < bottom and i == cursor_y
+            if at_cursor and typed.strip(" \u00a0" + _PROMPT):
+                cells, cut = 0, len(plain)
+                for j, ch in enumerate(plain):
+                    if cells >= cursor_x:
+                        cut = j
+                        break
+                    cells += _cells(ch)
+                typed = plain[:cut]
+            text = typed.lstrip().lstrip(_PROMPT).lstrip(" \u00a0") if i == top + 1 else typed.lstrip()
+            if at_cursor:
+                head = " ".join(p for p in parts if p)
+                return head + " " + text if head and text else head + text
+            parts.append(text.rstrip())
+        return " ".join(p for p in parts if p)
+    return None
+
+
 def wezterm_line_context(pane_id, run=subprocess.run):
     """(text before the cursor, text after it) on the pane's cursor row, or None.
 
@@ -96,6 +168,13 @@ def wezterm_line_context(pane_id, run=subprocess.run):
         if res.returncode != 0 or pane is None:
             return None
         row = int(pane["cursor_y"])
+        cursor_x = int(pane["cursor_x"])
+        res = run(["wezterm", "cli", "get-text", "--pane-id", str(pane_id), "--escapes"],
+                  capture_output=True, text=True, timeout=2)
+        if res.returncode == 0:
+            boxed = claude_input_before(res.stdout, cursor_x, row)
+            if boxed is not None:
+                return boxed, ""
         res = run(["wezterm", "cli", "get-text", "--pane-id", str(pane_id),
                    "--start-line", str(row), "--end-line", str(row)],
                   capture_output=True, text=True, timeout=2)

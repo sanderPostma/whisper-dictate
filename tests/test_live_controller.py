@@ -100,7 +100,7 @@ class LiveControllerTests(unittest.TestCase):
         ctl.process(chunk(1.0, 2.0))
         ctl.correct()
         self.assertEqual(self.target.edits, [Edit(0, "Hello there")])
-        self.assertEqual(new_target.edits, [Edit(0, " more")])
+        self.assertEqual(new_target.edits, [Edit(0, "More")])
         self.assertIs(ctl.target, new_target)
         self.assertEqual(correct.prompts, [])
 

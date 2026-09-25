@@ -118,7 +118,7 @@ class WezTermLineContextTests(unittest.TestCase):
     def test_reads_the_cursor_row(self):
         run = screen("> hi", 4, cursor_y=12)
         wezterm_line_context(7, run)
-        cmd = [c for c, _ in run.calls if tuple(c[:3]) == GET_TEXT][0]
+        cmd = [c for c, _ in run.calls if tuple(c[:3]) == GET_TEXT and "--start-line" in c][0]
         self.assertEqual(cmd[-4:], ["--start-line", "12", "--end-line", "12"])
 
     def test_unknown_pane_is_none(self):

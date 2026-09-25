@@ -120,8 +120,10 @@ class LiveController:
                 self.log("[live] commit: long pause (target line not readable)")
                 self.session.commit()
                 self.session.forget_history()
-            elif self.session.should_commit(long_pause=True):
-                self.log("[live] commit: long pause after sentence end")
+            elif self.session.chunk_count:
+                # The line is read again at the next chunk: after a pause the
+                # operator may have submitted it (Enter by hand) or moved on.
+                self.log("[live] commit: long pause (line is read again)")
                 self.session.commit()
 
     def _handle_chunk(self, chunk):
@@ -234,9 +236,10 @@ class LiveController:
         """Focus moved: freeze the window and follow the new focus, append-only."""
         self.session.commit()
         self.session.forget_history()
-        # The old line's text after the cursor means nothing in the new place;
-        # a target that knows its line sets it again at the next window.
-        self.session.after_text = ""
+        # The old line's text means nothing in the new place; a target that
+        # knows its line sets it again at the next window, and one that does
+        # not starts fresh (no leading space, no continued sentence).
+        self.session.set_context("", "")
         if self.make_target is not None:
             new = self.make_target()
             if new is not None:

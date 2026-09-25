@@ -38,12 +38,15 @@ def strip_echo(raw, context, max_words=8, min_words=3, min_words_inside=4):
     words = context.split()
     raw = _collapse(raw)
     low = raw.lower()
+    def ends_word(i):
+        return i >= len(low) or not low[i].isalnum()
+
     for n in range(min(max_words, len(words)), min_words - 1, -1):
         tail = " ".join(words[-n:]).lower()
-        if low.startswith(tail):
+        if low.startswith(tail) and ends_word(len(tail)):
             return raw[len(tail):].lstrip(" ,")
         at = low.rfind(tail) if n >= min_words_inside else -1
-        if at >= 0:
+        if at >= 0 and ends_word(at + len(tail)) and (at == 0 or not low[at - 1].isalnum()):
             return raw[at + len(tail):].lstrip(" ,")
     return raw
 
