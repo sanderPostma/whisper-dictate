@@ -84,6 +84,16 @@ written properly: "v D X dash two eight three", "VDX two eighty three" and the m
 `ticket_aliases` adds how the model writes a key it did not spell out, e.g.
 `{"VDX": ["videx"]}` turns "videx two for two" into `VDX-242` (only when a number follows).
 
+Shell commands: an utterance that starts with a command from `shell_commands` is typed as a
+command line: lower case, no punctuation, spoken flags written. "L s minus L." → `ls -l`,
+"Git branch." → `git branch`, "Git push dash dash force" → `git push --force`, "Sudo." →
+`sudo`. Spelled-out letters ("L s", "C D") count, and `shell_aliases` holds how the model
+writes a command it did not hear as one (`{"ls": ["alas"], "sudo": ["pseudo"]}`). An alias
+followed by a comma stays a word ("Alas, it failed."). The default list leaves out commands
+that are common English words (make, find, cat, head, top, ...); add them yourself if you
+want them. In live mode the command line closes the correction window, so a later correction
+never retypes it as a sentence.
+
 Auto punctuation: say "auto punctuation off" (whole utterance, one-shot or live) and the
 model's punctuation is dropped; only what you say is written: "comma", "period" / "full
 stop", "question mark", "exclamation mark", "colon", "semicolon". A word the model

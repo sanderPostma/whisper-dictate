@@ -42,7 +42,8 @@ from asr_models import (
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
 from live_commands import parse_auto_punctuation, parse_clear, parse_cursor, parse_undo, split_enter
-from text_fixes import fix_ticket_keys, manual_punctuation
+from text_fixes import (DEFAULT_SHELL_ALIASES, DEFAULT_SHELL_COMMANDS, fix_shell_command, fix_ticket_keys,
+                        manual_punctuation)
 from live_controller import LiveController, select_transcribers
 from live_output import WezTermTarget, XdotoolTarget, choose_target
 from live_segmenter import LiveSegmenter
@@ -106,6 +107,11 @@ DEFAULT_CONFIG = {
     # Off: the model's punctuation is dropped; say "comma", "period", ...
     # Spoken "auto punctuation on" / "auto punctuation off" switches it.
     "auto_punctuation": True,
+    # An utterance starting with one of these is typed as a command line: lower
+    # case, no punctuation, "minus l" -> "-l" ("L s minus L." -> "ls -l").
+    "shell_commands": DEFAULT_SHELL_COMMANDS,
+    # How the model writes a command it did not hear as one.
+    "shell_aliases": DEFAULT_SHELL_ALIASES,
     "live_corrections": True,
     "live_committed_context_chars": 400,
     "remote_server": {
@@ -341,6 +347,11 @@ class WhisperDictate:
             print(f"[whisper-dictate] Error loading replacements: {e}")
             return {}
     
+    def shell_command(self, text):
+        """The command line text is, or None when it is not one."""
+        return fix_shell_command(text, self.config.get("shell_commands", DEFAULT_SHELL_COMMANDS),
+                                 self.config.get("shell_aliases", DEFAULT_SHELL_ALIASES))
+
     def apply_replacements(self, text, lower_single_word=True, strip_trailing_period=True):
         """Apply text replacements (case-insensitive matching)."""
         replacements = self.load_replacements()
@@ -350,6 +361,10 @@ class WhisperDictate:
         if fixed != text:
             print(f"[post-process] Ticket keys: |{fixed}|")
             text = fixed
+        shell = self.shell_command(text)
+        if shell is not None:
+            print(f"[post-process] Shell command: |{shell}|")
+            return shell
         if not self.config.get("auto_punctuation", True) and not parse_auto_punctuation(text):
             text = manual_punctuation(text)
             print(f"[post-process] Manual punctuation: |{text}|")
@@ -1032,6 +1047,7 @@ class WhisperDictate:
             postprocess=lambda text: self.apply_replacements(
                 text, lower_single_word=False, strip_trailing_period=False),
             on_error=lambda msg: GLib.idle_add(lambda: self.notify(msg) or False),
+            is_verbatim=lambda text: self.shell_command(text) is not None,
             on_auto_punctuation=lambda on: GLib.idle_add(lambda: self.set_auto_punctuation(on) or False),
             on_done=lambda: GLib.idle_add(self._live_done),
         )

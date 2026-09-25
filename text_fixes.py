@@ -165,3 +165,45 @@ def _manual_line(line):
 def manual_punctuation(text):
     """Text with the model's punctuation removed and spoken marks written."""
     return "\n".join(_manual_line(line) for line in (text or "").split("\n"))
+
+
+# --- Shell commands ("L s minus L." -> "ls -l") -----------------------------
+
+# Only words that are rarely the first word of an English sentence: an
+# utterance starting with one of these is typed as a command line.
+DEFAULT_SHELL_COMMANDS = [
+    "ls", "cd", "pwd", "git", "sudo", "grep", "rg", "mkdir", "rmdir", "rm", "cp", "mv",
+    "chmod", "chown", "ssh", "scp", "rsync", "curl", "wget", "kubectl", "npm", "npx",
+    "pnpm", "pip", "systemctl", "journalctl", "apt", "tar", "ps", "htop", "vim", "nvim",
+    "du", "df", "jq", "sed", "awk", "tmux", "gh", "bd", "achat", "gradle", "ln",
+]
+# How the model writes a command it did not hear as one.
+DEFAULT_SHELL_ALIASES = {"ls": ["alas"], "sudo": ["pseudo"]}
+
+_FLAG_DASH = r"(?:minus|dash|-)"
+
+
+def _command_pattern(command, aliases):
+    spelled = r"\.?[\s.]*".join(re.escape(c) for c in command) + r"\.?"
+    forms = [f"(?P<cmd>{spelled})"]
+    # An alias is an ordinary word too ("Alas, it failed"): not before a comma.
+    forms += [f"(?P<alias{i}>{re.escape(a)})(?!\\s*,)" for i, a in enumerate(aliases)]
+    return re.compile(r"^\s*(?:" + "|".join(forms) + r")(?![\w'])", re.IGNORECASE)
+
+
+def fix_shell_command(text, commands, aliases=None):
+    """A command line when the utterance starts with a known shell command:
+    lower case, no punctuation, spoken flags written ("minus l" -> "-l",
+    "dash dash force" -> "--force"). None when it is not one."""
+    aliases = {k.lower(): v for k, v in (aliases or {}).items()}
+    for command in commands or ():
+        command = command.lower()
+        m = _command_pattern(command, aliases.get(command, ())).match(text or "")
+        if not m:
+            continue
+        rest = text[m.end():]
+        rest = re.sub(r"[,?!;]|\.(?=\s|$)", " ", rest).lower()
+        rest = re.sub(rf"(?<![\w-]){_FLAG_DASH}\s*{_FLAG_DASH}\s*(?=\w)|\bdouble\s+dash\s+", " --", rest)
+        rest = re.sub(rf"(?<![\w-]){_FLAG_DASH}\s*(?=\w)", " -", rest)
+        return " ".join([command, *rest.split()])
+    return None

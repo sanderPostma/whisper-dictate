@@ -57,7 +57,7 @@ def select_transcribers(remote_enabled, remote_is_down, remote, local, local_fal
 class LiveController:
     def __init__(self, session, target, fast_transcribe, correct_transcribe=None,
                  make_target=None, postprocess=None, on_error=None, on_done=None, log=print,
-                 on_auto_punctuation=None):
+                 on_auto_punctuation=None, is_verbatim=None):
         self.session = session
         self.target = target
         self.fast_transcribe = fast_transcribe
@@ -67,6 +67,9 @@ class LiveController:
         self.on_error = on_error
         self.on_done = on_done
         self.on_auto_punctuation = on_auto_punctuation
+        # Text typed exactly as heard (a shell command line): never rewritten
+        # by a correction that reads it as part of a sentence.
+        self.is_verbatim = is_verbatim or (lambda text: False)
         self.log = log
         self.corrections_enabled = correct_transcribe is not None
         self._jobs = queue.Queue()
@@ -171,6 +174,9 @@ class LiveController:
         self.log(f"[live] fast {time.monotonic() - started:.2f}s raw={raw!r} -> {_show(edit)}")
         if edit is not None:
             self._send(edit)
+        if self.is_verbatim(text):
+            self.log("[live] commit: command line typed verbatim")
+            self.session.commit()
 
     def correct(self):
         """Re-transcribe the window and rewrite the typed tail where it differs."""
