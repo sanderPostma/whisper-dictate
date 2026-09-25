@@ -62,7 +62,7 @@ Or with options:
 - **Settings** - Open config file
 
 Pressing Enter by voice works in one-shot and live mode: end with "press enter" (or
-"press return"), or say "enter" on its own. A bare "enter" inside a sentence stays text.
+"press return", or "engage" after a short pause), or say "enter" on its own. A bare "enter" inside a sentence stays text.
 "new line" / "new paragraph" insert line breaks through the replacements file.
 
 Cursor commands, said as a whole utterance (one-shot or live): "cursor back" / "cursor
@@ -114,7 +114,7 @@ Spoken repairs, for when a thinking pause put a full stop in the middle of a sen
 | "comma …" | start of a chunk | the previous `.` becomes `,` and the chunk continues the sentence |
 | "scratch that" (also heard as "stretch that"; or "scratch" alone) | end of a chunk | delete the current sentence (or the one just finished) |
 | "command clear", "command clear line", "scratch all", "scratch whole line" | whole utterance | clear the whole input line, typed text included (achat and WezTerm panes) |
-| "… press enter" / "press return", or "enter" said alone | end of a chunk | type the words, then press Enter (submit) |
+| "… press enter" / "press return" / "engage", or "enter" said alone | end of a chunk | type the words, then press Enter (submit); "engage" only alone or after a pause |
 
 Say the command words as their own piece, with a short pause before them ("… test more —
 period"): "period", "full stop" and "comma" are ordinary words too, so "the trial period"

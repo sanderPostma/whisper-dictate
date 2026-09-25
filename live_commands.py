@@ -35,7 +35,9 @@ _END_RE = re.compile(
     re.IGNORECASE,
 )
 _COMMA_RE = re.compile(r"^\s*(?:comma(?:\s*[,.;:]+\s*|\s*$)|,\s*)", re.IGNORECASE)
-_ENTER_RE = re.compile(r"(^|[,.;:!?]\s*|\s+)press\s+(?:enter|return)[\s.?!,]*$", re.IGNORECASE)
+_ENTER_RE = re.compile(r"(^|[,.;:!?]\s*|\s+)(?:press|push)\s+(?:enter|return)[\s.?!,]*$", re.IGNORECASE)
+# "engage" is an ordinary word too: only alone or set off by the model's punctuation.
+_ENGAGE_RE = re.compile(r"(^|[,.;:!?]\s*)engage[\s.?!,]*$", re.IGNORECASE)
 _ENTER_ALONE_RE = re.compile(r"^\s*(?:enter|return)[\s.?!,]*$", re.IGNORECASE)
 _FILLER = {"no", "oh", "okay", "ok", "um", "uh", "hmm", "ah", "well", "wait", "sorry", "yeah", "so"}
 # "stretch" is how the model tends to hear "scratch".
@@ -72,7 +74,7 @@ def split_enter(text):
     text = (text or "").strip()
     if _ENTER_ALONE_RE.match(text):
         return "", True
-    m = _ENTER_RE.search(text)
+    m = _ENTER_RE.search(text) or _ENGAGE_RE.search(text)
     if not m:
         return text, False
     mark = m.group(1).strip()
@@ -80,7 +82,7 @@ def split_enter(text):
 
 
 _SET_OFF_RE = re.compile(
-    r"(?:^|[,.;:!?])\s*(?:" + "|".join(k.replace(" ", r"\s+") for k in (*_END_WORDS, "comma", "scratch that", "stretch that", "press enter", "press return"))
+    r"(?:^|[,.;:!?])\s*(?:" + "|".join(k.replace(" ", r"\s+") for k in (*_END_WORDS, "comma", "scratch that", "stretch that", "press enter", "press return", "push enter", "engage"))
     + r")\s*(?:[,.;:!?]|$)",
     re.IGNORECASE,
 )

@@ -63,6 +63,7 @@ class ParseCommandTests(unittest.TestCase):
         self.assertTrue(mentions_command("Hello there. Period. And more"))
         self.assertTrue(mentions_command("I want to, comma, test"))
         self.assertTrue(mentions_command("Done. Scratch that. Next"))
+        self.assertTrue(mentions_command("Run it. Engage. Then more"))
         self.assertFalse(mentions_command("We extended the trial period and the comma rule"))
 
     def test_filler_before_scratch_that_counts_as_nothing(self):
@@ -78,6 +79,16 @@ class ParseCommandTests(unittest.TestCase):
     def test_enter_alone(self):
         self.assertEqual(parse_command("Enter."), Command(enter=True))
         self.assertEqual(parse_command("Press enter."), Command(enter=True))
+
+    def test_engage_is_enter(self):
+        self.assertEqual(parse_command("Engage."), Command(enter=True))
+        self.assertEqual(parse_command("/compact. Engage."), Command(rest="/compact.", enter=True))
+        self.assertEqual(parse_command("Run the tests, engage."), Command(rest="Run the tests", enter=True))
+        self.assertEqual(parse_command("Run it, push enter."), Command(rest="Run it", enter=True))
+
+    def test_engage_as_a_word_is_text(self):
+        for text in ("We should engage the team.", "Time to engage", "They engage."):
+            self.assertIsNone(parse_command(text), text)
 
     def test_enter_as_a_word_is_text(self):
         for text in ("Enter is not working.", "Now enter the room", "the center", "enter"[:0] + "we enter"):
