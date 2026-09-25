@@ -180,8 +180,7 @@ class SendTests(unittest.TestCase):
         achat = FakeAchat(
             {"ok": True, "rev": 11},
             {"ok": False, "error": "conflict", "rev": 12},
-            {"ok": False, "error": "unknown_line"},
-            {"ok": True, "rev": 12, "known": False, "text": "", "cursor": 0},
+            {"ok": False, "error": "cursor_not_at_end", "rev": 13},
             {"ok": False, "error": "conflict", "rev": 13},
             {"ok": True, "rev": 13, "known": True, "text": "hi", "cursor": 2},
             {"ok": True, "rev": 15},
@@ -191,7 +190,7 @@ class SendTests(unittest.TestCase):
         self.assertFalse(t.last_send_dropped)
         t.send(Edit(1, "b"))  # refused correction: the fast text is still there
         self.assertFalse(t.last_send_dropped)
-        t.send(Edit(0, "c"))  # append refused on an Unknown line: words lost
+        t.send(Edit(0, "c"))  # append refused by an achat without at_cursor: words lost
         self.assertTrue(t.last_send_dropped)
         t.send(Edit(0, "d"))  # append retried after operator text: typed
         self.assertFalse(t.last_send_dropped)
@@ -278,12 +277,10 @@ class SendTests(unittest.TestCase):
         self.assertFalse(target(achat).send(Edit(0, "x")))
         self.assertEqual(achat.requests[2]["expect_rev"], 11)
 
-    def test_append_not_retried_on_unknown_line(self):
-        achat = FakeAchat(
-            {"ok": False, "error": "unknown_line"},
-            {"ok": True, "rev": 11, "known": False, "text": "", "cursor": 0},
-        )
-        self.assertFalse(target(achat).send(Edit(0, "x")))
+    def test_append_on_an_unknown_draft_goes_as_keys(self):
+        t = target(FakeAchat({"ok": False, "error": "unknown_line"}))
+        self.assertTrue(t.send(Edit(0, "x")))
+        self.assertFalse(t.exact_line)
 
     def test_busy_is_retried(self):
         achat = FakeAchat({"ok": False, "error": "busy", "rev": 10}, {"ok": True, "rev": 11})
@@ -389,14 +386,67 @@ class TypeIntoLineTests(unittest.TestCase):
         self.assertTrue(type_into_line(target(achat), "The end"))
 
     def test_dropped_text_is_not_handled(self):
-        achat = FakeAchat(state("This is"), {"ok": False, "error": "unknown_line"},
-                          state("", known=False))
+        achat = FakeAchat(state("This is"), {"ok": False, "error": "cursor_not_at_end", "rev": 21})
         self.assertFalse(type_into_line(target(achat), "The end"))
 
     def test_nothing_to_type_is_handled(self):
         achat = FakeAchat(state("This is"))
         self.assertTrue(type_into_line(target(achat), " ... "))
         self.assertEqual(len(achat.requests), 1)
+
+
+class UnknownDraftFallbackTests(unittest.TestCase):
+    """A multi-line draft is Unknown to achat: use the pane like a plain WezTerm pane."""
+
+    def make(self, *responses):
+        self.run = FakeRun({
+            LIST_CLIENTS: json.dumps([{"focused_pane_id": 7, "idle_time": {"secs": 0, "nanos": 0}}]),
+            LIST_PANES + ("--format",): json.dumps([{"pane_id": 7, "tty_name": "/dev/pts/4",
+                                                    "cursor_x": 11, "cursor_y": 3}]),
+            ("wezterm", "cli", "get-text"): "> line one\n",
+            ACTIVE_WINDOW: "42\n",
+        })
+        self.sent = []
+        run = self.run
+
+        def recording_run(cmd, **kwargs):
+            if cmd[:3] == ["wezterm", "cli", "send-text"]:
+                self.sent.append(kwargs["input"])
+            return run(cmd, **kwargs)
+
+        return AchatTarget(7, "42", "/x.sock", 10, run=recording_run, request=FakeAchat(*responses),
+                           sleep=lambda s: None, log=lambda *_: None)
+
+    def unknown(self):
+        return {"ok": True, "rev": 12, "known": False, "text": "", "cursor": 0}
+
+    def test_typing_into_an_unknown_draft_uses_keystrokes(self):
+        t = self.make({"ok": False, "error": "unknown_line"}, self.unknown())
+        self.assertTrue(t.send(Edit(0, " more")))
+        self.assertEqual(self.sent, [b" more"])
+        self.assertFalse(t.exact_line)
+
+    def test_line_context_of_an_unknown_draft_comes_from_the_screen(self):
+        t = self.make(self.unknown())
+        self.assertEqual(t.line_context(), ("line one", ""))
+        self.assertFalse(t.exact_line)
+
+    def test_known_again_is_exact_again(self):
+        t = self.make(self.unknown(), {"ok": True, "rev": 20, "known": True, "text": "", "cursor": 0})
+        t.line_context()
+        self.assertEqual(t.line_context(), ("", ""))
+        self.assertTrue(t.exact_line)
+
+    def test_cursor_move_on_an_unknown_draft_uses_readline_keys(self):
+        from live_commands import CursorMove
+        t = self.make(self.unknown())
+        self.assertTrue(t.move_cursor(CursorMove("word", -1, 2)))
+        self.assertEqual(self.sent, [b"\x1bb\x1bb"])
+
+    def test_clear_on_an_unknown_draft_uses_readline_keys(self):
+        t = self.make(self.unknown())
+        self.assertTrue(t.clear_line())
+        self.assertEqual(self.sent, [b"\x05\x15"])
 
 
 class ChooseTargetTests(unittest.TestCase):

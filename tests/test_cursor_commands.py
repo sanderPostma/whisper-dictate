@@ -79,14 +79,15 @@ class TargetMoveTests(unittest.TestCase):
         self.assertEqual(cmd[:6], ["wezterm", "cli", "send-text", "--pane-id", "7", "--no-paste"])
         self.assertEqual(kwargs["input"], b"\x1b[D" * 13)
 
-    def test_achat_unknown_line_does_not_move(self):
+    def test_achat_unknown_draft_moves_with_readline_keys(self):
         from live_achat import AchatTarget
         run = Run()
         t = AchatTarget(7, "42", "/x.sock", 4, run=run,
                         request=lambda s, p: {"ok": True, "rev": 4, "known": False, "text": "", "cursor": 0},
                         sleep=lambda s: None, log=lambda *_: None)
-        self.assertFalse(t.move_cursor(CursorMove("end")))
-        self.assertEqual(run.calls, [])
+        # An Unknown (multi-line) draft: readline keys on the pane, like plain WezTerm.
+        self.assertTrue(t.move_cursor(CursorMove("end")))
+        self.assertEqual(run.calls[-1][1]["input"], b"\x05")
 
     def test_wezterm_uses_readline_keys(self):
         from live_output import WezTermTarget
@@ -128,14 +129,14 @@ class ClearLineTests(unittest.TestCase):
         self.assertEqual(requests[-1], {"op": "edit", "expect_rev": 11, "backspace": 11,
                                         "insert": "", "at_cursor": True})
 
-    def test_achat_unknown_line_is_left_alone(self):
+    def test_achat_unknown_draft_clears_with_readline_keys(self):
         from live_achat import AchatTarget
         run = Run()
         t = AchatTarget(7, "42", "/x.sock", 4, run=run,
                         request=lambda s, p: {"ok": True, "rev": 4, "known": False, "text": "", "cursor": 0},
                         sleep=lambda s: None, log=lambda *_: None)
-        self.assertFalse(t.clear_line())
-        self.assertEqual(run.calls, [])
+        self.assertTrue(t.clear_line())
+        self.assertEqual(run.calls[-1][1]["input"], b"\x05\x15")
 
     def test_wezterm_end_then_kill_to_start(self):
         from live_output import WezTermTarget

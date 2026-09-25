@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import time
 
-from live_output import wezterm_focused_pane, xdotool_active_window
+from live_output import WezTermTarget, wezterm_focused_pane, xdotool_active_window
 from live_commands import word_target
 from live_session import Edit, normalise
 
@@ -136,9 +136,14 @@ class AchatTarget:
     """Types into the prompt line of an `achat run` session in a WezTerm pane."""
 
     name = "achat"
-    # line_context() is the real line, so the controller can check that what
-    # it typed is still exactly before the cursor before rewriting it.
-    exact_line = True
+
+    @property
+    def exact_line(self):
+        """line_context() is the real line (so the controller can check that
+        what it typed is still exactly before the cursor) - except while
+        achat cannot model the draft (Unknown, e.g. multi-line), when it is
+        read off the screen like any WezTerm pane."""
+        return not self.unknown
     # A rejected edit means the operator touched the line: commit the window
     # and carry on, instead of giving up on corrections for the session.
     recoverable_rejections = True
@@ -152,6 +157,10 @@ class AchatTarget:
         self.dead = False
         self.last_send_dropped = False  # the last send's inserted text never landed
         self.last_inserted = None  # what the last successful send typed
+        # While achat reports the draft Unknown (a multi-line draft, say), the
+        # pane is used like a plain WezTerm pane: keystrokes, screen context.
+        self.unknown = False
+        self._screen = WezTermTarget(pane_id, window_id, run)
         self._run = run
         self._request = request
         self._sleep = sleep
@@ -225,7 +234,10 @@ class AchatTarget:
         if resp is None:
             self.last_send_dropped = edit.backspace == 0
             return False
+        if resp.get("error") == "unknown_line":
+            return self._send_as_keys(edit)
         if resp.get("ok"):
+            self.unknown = False
             rev = _rev(resp.get("rev"))
             if rev is None:
                 self._log("[live] achat reply without rev")
@@ -271,8 +283,11 @@ class AchatTarget:
         line model follows every step (a word-jump key it did not know would
         leave the line Unknown and stop dictation)."""
         state = self._call({"op": "state"})
-        if not isinstance(state, dict) or not state.get("ok") or not state.get("known"):
+        if not isinstance(state, dict) or not state.get("ok"):
             return False
+        if not state.get("known"):
+            self.unknown = True
+            return self._screen.move_cursor(move)
         text = state.get("text") or ""
         cursor = state.get("cursor")
         if not isinstance(cursor, int):
@@ -287,8 +302,11 @@ class AchatTarget:
         end, then one compare-and-swap edit over exactly the known line, so
         nothing typed in between is deleted unseen."""
         state = self._call({"op": "state"})
-        if not isinstance(state, dict) or not state.get("ok") or not state.get("known"):
+        if not isinstance(state, dict) or not state.get("ok"):
             return False
+        if not state.get("known"):
+            self.unknown = True
+            return self._screen.clear_line()
         text = state.get("text") or ""
         cursor = state.get("cursor")
         if not isinstance(cursor, int):
@@ -335,6 +353,17 @@ class AchatTarget:
         self._sleep(ENTER_SETTLE_S)
         return self._keys(b"\r")
 
+    def _send_as_keys(self, edit):
+        """The draft is Unknown to achat: type into the pane directly, the way a
+        plain WezTerm pane is typed into (blind backspaces within the window)."""
+        self.unknown = True
+        ok = self._screen.send(edit)
+        self.last_send_dropped = not ok and edit.backspace == 0
+        if ok:
+            self.last_inserted = edit.insert
+        self._log(f"[live] achat draft Unknown; typed as keys ({'ok' if ok else 'failed'})")
+        return ok
+
     def line_context(self, adopt_rev=True):
         """(text before the cursor, text after it) on a Known line, else None.
 
@@ -342,8 +371,12 @@ class AchatTarget:
         with an empty window; a check made mid-window must pass False.
         """
         state = self._call({"op": "state"})
-        if not isinstance(state, dict) or not state.get("ok") or not state.get("known"):
+        if not isinstance(state, dict) or not state.get("ok"):
             return None
+        if not state.get("known"):
+            self.unknown = True
+            return self._screen.line_context()
+        self.unknown = False
         text = state.get("text") or ""
         cursor = state.get("cursor")
         if not isinstance(cursor, int) or not 0 <= cursor <= len(text):
