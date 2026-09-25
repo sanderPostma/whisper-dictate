@@ -25,7 +25,7 @@ class ParseUndoTests(unittest.TestCase):
             self.assertTrue(parse_undo(text), text)
 
     def test_not_a_command(self):
-        for text in ("Undo.", "I will undo that change", "undo the last commit", "command"):
+        for text in ("I will undo that change", "undo the last commit", "command"):
             self.assertFalse(parse_undo(text), text)
 
 

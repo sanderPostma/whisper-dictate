@@ -207,3 +207,26 @@ def fix_shell_command(text, commands, aliases=None):
         rest = re.sub(rf"(?<![\w-]){_FLAG_DASH}\s*(?=\w)", " -", rest)
         return " ".join([command, *rest.split()])
     return None
+
+
+# --- Slash commands ("Flash clear." -> "/clear") -----------------------------
+
+DEFAULT_SLASH_COMMANDS = [
+    "clear", "compact", "new", "help", "model", "review", "resume", "init", "status",
+    "config", "cost", "memory", "context", "agents", "permissions", "doctor", "exit",
+    "rewind", "export", "hooks", "mcp", "plugin", "usage", "login", "logout", "fast",
+]
+# How the model hears "slash" at the start of an utterance.
+_SLASH_WORDS = ("slash", "splash", "flash", "slush", "less", "/")
+_SLASH_RE = re.compile(
+    r"^\s*(?:" + "|".join(re.escape(w) for w in _SLASH_WORDS) + r")\s*([A-Za-z][\w-]*)[\s.!?,]*$",
+    re.IGNORECASE)
+
+
+def fix_slash_command(text, commands):
+    """"Flash clear." -> "/clear": only a whole utterance of a slash word and a
+    known command, so "Less clear than before" stays text."""
+    m = _SLASH_RE.match(text or "")
+    if m and m.group(1).lower() in {c.lower().lstrip("/") for c in commands or ()}:
+        return "/" + m.group(1).lower()
+    return text

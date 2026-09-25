@@ -43,8 +43,10 @@ _FILLER = {"no", "oh", "okay", "ok", "um", "uh", "hmm", "ah", "well", "wait", "s
 # "stretch" is how the model tends to hear "scratch".
 _SCRATCH_RE = re.compile(r"(?:^|[\s,.?!]+)(?:scratch|stretch)\s+that[\s.?!,]*$", re.IGNORECASE)
 _SCRATCH_ALONE_RE = re.compile(r"^\s*(?:scratch|stretch)[\s.?!,]*$", re.IGNORECASE)
+# "command" as the model tends to hear it.
+_CMD = r"(?:command|comment|commend)[\s,.]+"
 _CLEAR_RE = re.compile(
-    r"^\s*(?:command[\s,]+clear(?:[\s,]+(?:the[\s,]+)?line)?"
+    r"^\s*(?:" + _CMD + r"clear(?:[\s,]+(?:the[\s,]+)?line)?"
     r"|(?:scratch|stretch)[\s,]+(?:all|everything|(?:the[\s,]+)?whole[\s,]+line))[\s.!,]*$",
     re.IGNORECASE,
 )
@@ -217,10 +219,11 @@ def word_target(text, cursor, move):
 # --- Undo ("command undo", "undo that") ------------------------------------
 
 _UNDO_RE = re.compile(
-    r"^\s*(?:command[\s,]+(?:undo|and\s+do)|undo[\s,]+that)[\s.!,]*$", re.IGNORECASE)
+    r"^\s*(?:" + _CMD + r"(?:undo|and\s+do)|undo(?:[\s,]+that)?)[\s.!,]*$", re.IGNORECASE)
 
 
 def parse_undo(text):
-    """Whether the whole utterance is an undo ("command undo", "undo that").
-    "command and do" is how the model tends to write "command undo"."""
+    """Whether the whole utterance is an undo ("command undo", "undo that",
+    or "undo" alone). "command and do" / "comment undo" are how the model
+    tends to write "command undo"."""
     return bool(_UNDO_RE.match(text or ""))

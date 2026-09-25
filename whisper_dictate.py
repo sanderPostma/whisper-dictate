@@ -42,8 +42,8 @@ from asr_models import (
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
 from live_commands import parse_auto_punctuation, parse_clear, parse_cursor, parse_undo, split_enter
-from text_fixes import (DEFAULT_SHELL_ALIASES, DEFAULT_SHELL_COMMANDS, fix_shell_command, fix_ticket_keys,
-                        manual_punctuation)
+from text_fixes import (DEFAULT_SHELL_ALIASES, DEFAULT_SHELL_COMMANDS, DEFAULT_SLASH_COMMANDS, fix_shell_command,
+                        fix_slash_command, fix_ticket_keys, manual_punctuation)
 from live_controller import LiveController, select_transcribers
 from live_output import WezTermTarget, XdotoolTarget, choose_target
 from live_segmenter import LiveSegmenter
@@ -76,6 +76,13 @@ CONFIG_DIR = Path.home() / ".config" / "whisper-dictate"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 REPLACEMENTS_PATH = CONFIG_DIR / "replacements.yml"
 ICON_DIR = Path(__file__).parent / "icons"
+# Always in the ASR prompt, so the model hears the spoken commands as such.
+COMMAND_VOCABULARY = [
+    "slash", "command", "command undo", "undo that", "command clear", "scratch that",
+    "press enter", "engage", "cursor back", "cursor forward", "period", "comma",
+    "question mark", "auto punctuation",
+]
+
 DEFAULT_CONFIG = {
     "hotkey": "<Alt>d",
     "model": "base",
@@ -112,6 +119,11 @@ DEFAULT_CONFIG = {
     "shell_commands": DEFAULT_SHELL_COMMANDS,
     # How the model writes a command it did not hear as one.
     "shell_aliases": DEFAULT_SHELL_ALIASES,
+    # Spoken "slash clear" (also misheard: "flash clear") types /clear.
+    "slash_commands": DEFAULT_SLASH_COMMANDS,
+    # Extra words the model should prefer (names, jargon), sent with every
+    # transcription next to the spoken command words.
+    "vocabulary": [],
     "live_corrections": True,
     "live_committed_context_chars": 400,
     "remote_server": {
@@ -221,8 +233,12 @@ class WhisperDictate:
         return multilingual_model(model_name)
 
     def get_asr_context(self):
-        """Return the active jargon/context prompt for ASR."""
-        return context_from_config(self.config, CONFIG_DIR)
+        """Return the active jargon/context prompt for ASR: the configured pack,
+        then the spoken command words, ticket keys and `vocabulary`."""
+        words = [*COMMAND_VOCABULARY, *self.config.get("ticket_keys", []),
+                 *self.config.get("vocabulary", [])]
+        parts = [context_from_config(self.config, CONFIG_DIR), "Vocabulary: " + ", ".join(words) + "."]
+        return "\n".join(p for p in parts if p and p.strip())
 
     def _torch_device(self):
         try:
@@ -356,6 +372,13 @@ class WhisperDictate:
         """Apply text replacements (case-insensitive matching)."""
         replacements = self.load_replacements()
         print(f"[post-process] IN:  |{text}|")
+        if re.match(r"\s*vocabulary\s*:", text, re.IGNORECASE):
+            print("[post-process] Dropped: the model repeated its vocabulary prompt")
+            return ""
+        slash = fix_slash_command(text, self.config.get("slash_commands", DEFAULT_SLASH_COMMANDS))
+        if slash != text:
+            print(f"[post-process] Slash command: |{slash}|")
+            return slash
         fixed = fix_ticket_keys(text, self.config.get("ticket_keys", []),
                                 self.config.get("ticket_aliases", {}))
         if fixed != text:

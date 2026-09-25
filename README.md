@@ -72,7 +72,7 @@ prompts the move is counted from the known line and sent as arrow keys; other We
 get Alt+B / Alt+F and Ctrl+A / Ctrl+E; other windows Ctrl+Left / Ctrl+Right and Home / End.
 Dictation continues at the new cursor position.
 
-Undo, said as a whole utterance: "command undo" or "undo that". Reverts the last dictation
+Undo, said as a whole utterance: "command undo", "undo that" or just "undo" (also as misheard: "comment undo"). Reverts the last dictation
 step (an utterance, or a repair such as "scratch that"); say it again to go further back.
 Typical use: a word came out wrong, say "undo that" and repeat it. Live mode, and one-shot in
 achat prompts (the line must still end with exactly that text). Enter and cursor moves are
@@ -83,6 +83,14 @@ written properly: "v D X dash two eight three", "VDX two eighty three" and the m
 "v D X dash two A three" all become `VDX-283`. Only text after one of your keys is touched.
 `ticket_aliases` adds how the model writes a key it did not spell out, e.g.
 `{"VDX": ["videx"]}` turns "videx two for two" into `VDX-242` (only when a number follows).
+
+Vocabulary: every transcription is sent with the spoken command words (slash, command, scratch
+that, ...), your `ticket_keys` and your `vocabulary` list (e.g. `["Sphereon", "achat"]`), so
+Qwen prefers those spellings. A misheard word already typed on the line is sent as context
+too and tends to come back when you repeat yourself: say "undo that" first, then say it again.
+
+Slash commands: "slash clear" types `/clear`, also when heard as "flash clear", "splash
+clear" or "less clear" (the whole utterance, and only for commands in `slash_commands`).
 
 Shell commands: an utterance that starts with a command from `shell_commands` is typed as a
 command line: lower case, no punctuation, spoken flags written. "L s minus L." → `ls -l`,
