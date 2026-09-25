@@ -12,7 +12,8 @@ import time
 
 import numpy as np
 
-from live_commands import Command, mentions_command, parse_clear, parse_command, parse_cursor, parse_undo
+from live_commands import (Command, mentions_command, parse_auto_punctuation, parse_clear, parse_command,
+                           parse_cursor, parse_undo)
 from live_segmenter import ChunkReady, LongPause
 
 _STOP = object()
@@ -55,7 +56,8 @@ def select_transcribers(remote_enabled, remote_is_down, remote, local, local_fal
 
 class LiveController:
     def __init__(self, session, target, fast_transcribe, correct_transcribe=None,
-                 make_target=None, postprocess=None, on_error=None, on_done=None, log=print):
+                 make_target=None, postprocess=None, on_error=None, on_done=None, log=print,
+                 on_auto_punctuation=None):
         self.session = session
         self.target = target
         self.fast_transcribe = fast_transcribe
@@ -64,6 +66,7 @@ class LiveController:
         self.postprocess = postprocess or (lambda text: text)
         self.on_error = on_error
         self.on_done = on_done
+        self.on_auto_punctuation = on_auto_punctuation
         self.log = log
         self.corrections_enabled = correct_transcribe is not None
         self._jobs = queue.Queue()
@@ -134,6 +137,15 @@ class LiveController:
             self._report(f"Live transcription failed: {e}")
             return
         text = self.postprocess(raw or "")
+        auto_punctuation = parse_auto_punctuation(text)
+        if auto_punctuation is not None:
+            # A new punctuation mode: no later correction may retype what was
+            # typed under the old one.
+            self.session.commit()
+            self.log(f"[live] auto punctuation {'on' if auto_punctuation else 'off'} raw={raw!r}")
+            if self.on_auto_punctuation:
+                self.on_auto_punctuation(auto_punctuation)
+            return
         if parse_clear(text):
             self._run_clear(raw)
             return

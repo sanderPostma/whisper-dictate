@@ -53,13 +53,19 @@ def is_slash_command(line):
     return line.lstrip().startswith("/")
 
 
-def normalise(raw, before, after=""):
+def normalise(raw, before, after="", keep_lone_mark=False):
     """Turn a raw transcription into the exact text to type between `before`
-    and `after` (the rest of the line when dictating mid-line)."""
+    and `after` (the rest of the line when dictating mid-line).
+
+    A lone mark (".") is model noise and dropped, unless keep_lone_mark: with
+    auto punctuation off it was said ("period").
+    """
     # Precomposed: achat refuses combining marks, and backspace counts are
     # per character on every target.
     text = unicodedata.normalize("NFC", _collapse(raw))
     text = strip_echo(text, before).strip(" ")
+    if keep_lone_mark and text in (",", ".", "?", "!", ";", ":"):
+        return text  # glued to the text before it
     if not any(ch.isalnum() or ch == "\n" for ch in text):
         return ""
     stripped = before.rstrip()
@@ -71,7 +77,7 @@ def normalise(raw, before, after=""):
             low = text[0].lower()
             if len(low) == 1:  # "İ".lower() grows a combining mark
                 text = low + text[1:]
-    if before and not before.endswith((" ", "\n")) and not text.startswith("\n"):
+    if before and not before.endswith((" ", "\n")) and not text.startswith(("\n", ",", ".", "?", "!", ";", ":")):
         text = " " + text
     if is_slash_command(before.split("\n")[-1] + text):
         text = text.rstrip(".?!")

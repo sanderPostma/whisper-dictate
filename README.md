@@ -84,6 +84,14 @@ written properly: "v D X dash two eight three", "VDX two eighty three" and the m
 `ticket_aliases` adds how the model writes a key it did not spell out, e.g.
 `{"VDX": ["videx"]}` turns "videx two for two" into `VDX-242` (only when a number follows).
 
+Auto punctuation: say "auto punctuation off" (whole utterance, one-shot or live) and the
+model's punctuation is dropped; only what you say is written: "comma", "period" / "full
+stop", "question mark", "exclamation mark", "colon", "semicolon". A word the model
+capitalised only because it started a sentence goes back to lower case (proper nouns too,
+except "I" and acronyms). "auto punctuation on" switches back. Also a checkbox in the tray;
+the setting (`auto_punctuation`) is saved. With it off, "period" and "comma" always count as
+marks, also in "the trial period".
+
 ## Live dictation
 
 Press the dictation hotkey (`<Alt>d`) twice within a second (double beep), or pick

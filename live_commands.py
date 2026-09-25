@@ -50,6 +50,20 @@ _CLEAR_RE = re.compile(
 )
 
 
+_AUTO_PUNCT_RE = re.compile(
+    r"^\s*auto(?:matic)?[\s-]*punctuation[\s,:]+(on|off|of)[\s.!,]*$", re.IGNORECASE)
+_LONE_MARK_RE = re.compile(r"^\s*([.?!,])\s*$")
+
+
+def parse_auto_punctuation(text):
+    """True / False for "auto punctuation on" / "off" said as the whole
+    utterance ("of" is how the model tends to hear "off"), else None."""
+    m = _AUTO_PUNCT_RE.match(text or "")
+    if not m:
+        return None
+    return m.group(1).lower() == "on"
+
+
 def parse_clear(text):
     """Whether the whole utterance asks to clear the whole line
     ("command clear", "command clear line", "scratch all", "scratch whole line")."""
@@ -91,12 +105,21 @@ _SET_OFF_RE = re.compile(
 def mentions_command(text):
     """Whether a command word stands on its own anywhere in text (between
     punctuation), as in a correction that heard a command the fast pass missed."""
-    return parse_command(text) is not None or bool(_SET_OFF_RE.search(text or ""))
+    if _LONE_MARK_RE.match(text or ""):
+        return False  # model noise in a correction, not a command
+    return (parse_command(text) is not None or parse_auto_punctuation(text) is not None
+            or bool(_SET_OFF_RE.search(text or "")))
 
 
 def parse_command(text):
     """The spoken command in a chunk's text, or None for plain dictation."""
     text = (text or "").strip()
+    lone = _LONE_MARK_RE.match(text)
+    if lone:
+        # A mark said on its own (auto punctuation off): it belongs to the
+        # previous chunk.
+        mark = lone.group(1)
+        return Command(comma=True) if mark == "," else Command(end=mark)
     if _SCRATCH_ALONE_RE.match(text):
         return Command(scratch=True)
     m = _SCRATCH_RE.search(text)

@@ -3,6 +3,9 @@
 fix_ticket_keys: spoken Jira keys ("v D X dash two eight three", "VDX two A
 three") become the real key ("VDX-283"). Only after a configured project key,
 so ordinary words are never turned into digits.
+
+manual_punctuation: with automatic punctuation off, the model's punctuation
+is dropped and only spoken marks ("comma", "period", ...) are written.
 """
 
 import re
@@ -105,3 +108,60 @@ def fix_ticket_keys(text, keys, aliases=None):
             pos = end
         text = "".join(out) + text[pos:]
     return text
+
+
+_SPOKEN_MARKS = {
+    ("comma",): ",",
+    ("period",): ".",
+    ("full", "stop"): ".",
+    ("question", "mark"): "?",
+    ("exclamation", "mark"): "!",
+    ("exclamation", "point"): "!",
+    ("colon",): ":",
+    ("semicolon",): ";",
+    ("semi", "colon"): ";",
+}
+_MODEL_MARKS = ".,?!;:\u2026"
+_KEEP_CASE = {"I", "I'm", "I'll", "I've", "I'd"}
+
+
+def _lower_first(word):
+    alpha = "".join(ch for ch in word if ch.isalpha())
+    if word in _KEEP_CASE or (len(alpha) > 1 and alpha.isupper()):
+        return word
+    low = word[:1].lower()
+    return low + word[1:] if len(low) == 1 else word
+
+
+def _manual_line(line):
+    # 1. The model's own punctuation goes; a word it capitalised only because
+    #    it started a sentence there goes back to lower case.
+    words, sentence_start = [], False
+    for token in line.split():
+        word = token.rstrip(_MODEL_MARKS)
+        if word:
+            words.append(_lower_first(word) if sentence_start else word)
+        sentence_start = any(ch in ".?!\u2026" for ch in token[len(word):])
+    # 2. Spoken marks become punctuation on the word before them.
+    out, i, capital = [], 0, False
+    while i < len(words):
+        for spoken, mark in _SPOKEN_MARKS.items():
+            if tuple(w.lower() for w in words[i:i + len(spoken)]) == spoken:
+                if out:
+                    out[-1] += mark
+                else:
+                    out.append(mark)
+                capital = mark in ".?!"
+                i += len(spoken)
+                break
+        else:
+            word = words[i]
+            out.append(word[:1].upper() + word[1:] if capital else word)
+            capital = False
+            i += 1
+    return " ".join(out)
+
+
+def manual_punctuation(text):
+    """Text with the model's punctuation removed and spoken marks written."""
+    return "\n".join(_manual_line(line) for line in (text or "").split("\n"))

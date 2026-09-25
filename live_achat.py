@@ -397,7 +397,7 @@ class AchatTarget:
         return wezterm_focused_pane(self._run) == self.pane_id
 
 
-def type_into_line(target, raw):
+def type_into_line(target, raw, keep_lone_mark=False):
     """One-shot dictation into an achat prompt, shaped by the text around the
     cursor (case, spaces, no full stop before a following word).
 
@@ -407,7 +407,7 @@ def type_into_line(target, raw):
     context = target.line_context()
     if context is None:
         return False
-    text = normalise(raw, *context)
+    text = normalise(raw, *context, keep_lone_mark=keep_lone_mark)
     if not text:
         return True
     if target.send(Edit(0, text)):

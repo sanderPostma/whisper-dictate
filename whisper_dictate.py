@@ -41,8 +41,8 @@ from asr_models import (
 )
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
-from live_commands import parse_clear, parse_cursor, parse_undo, split_enter
-from text_fixes import fix_ticket_keys
+from live_commands import parse_auto_punctuation, parse_clear, parse_cursor, parse_undo, split_enter
+from text_fixes import fix_ticket_keys, manual_punctuation
 from live_controller import LiveController, select_transcribers
 from live_output import WezTermTarget, XdotoolTarget, choose_target
 from live_segmenter import LiveSegmenter
@@ -103,6 +103,9 @@ DEFAULT_CONFIG = {
     "ticket_keys": [],
     # How the model writes a key it did not spell out, e.g. {"VDX": ["videx"]}.
     "ticket_aliases": {},
+    # Off: the model's punctuation is dropped; say "comma", "period", ...
+    # Spoken "auto punctuation on" / "auto punctuation off" switches it.
+    "auto_punctuation": True,
     "live_corrections": True,
     "live_committed_context_chars": 400,
     "remote_server": {
@@ -347,6 +350,9 @@ class WhisperDictate:
         if fixed != text:
             print(f"[post-process] Ticket keys: |{fixed}|")
             text = fixed
+        if not self.config.get("auto_punctuation", True) and not parse_auto_punctuation(text):
+            text = manual_punctuation(text)
+            print(f"[post-process] Manual punctuation: |{text}|")
         
         if not replacements:
             print(f"[post-process] No replacements loaded")
@@ -370,8 +376,9 @@ class WhisperDictate:
                 print(f"[post-process] Matched |{pattern}| -> |{replacement}| (trim={should_trim_spaces})")
             text = new_text
         
-        # Remove trailing period (but keep periods between sentences)
-        if strip_trailing_period and text.endswith('.'):
+        # Remove trailing period (but keep periods between sentences). With
+        # auto punctuation off, a period is there because it was said.
+        if strip_trailing_period and self.config.get("auto_punctuation", True) and text.endswith('.'):
             text = text[:-1]
             print(f"[post-process] Removed trailing period")
         
@@ -917,6 +924,10 @@ class WhisperDictate:
         # Apply text replacements. Where the line is readable it decides case,
         # so the blunt single-word lowercasing is left out there.
         text = self.apply_replacements(text, lower_single_word=line_source is None)
+        auto_punctuation = parse_auto_punctuation(text)
+        if auto_punctuation is not None:
+            GLib.idle_add(lambda: self.set_auto_punctuation(auto_punctuation) or self.update_status("Ready"))
+            return
         if parse_clear(text):
             GLib.idle_add(lambda: self._oneshot_clear(line_source))
             return
@@ -1021,6 +1032,7 @@ class WhisperDictate:
             postprocess=lambda text: self.apply_replacements(
                 text, lower_single_word=False, strip_trailing_period=False),
             on_error=lambda msg: GLib.idle_add(lambda: self.notify(msg) or False),
+            on_auto_punctuation=lambda on: GLib.idle_add(lambda: self.set_auto_punctuation(on) or False),
             on_done=lambda: GLib.idle_add(self._live_done),
         )
         controller.start()
@@ -1506,7 +1518,8 @@ class WhisperDictate:
             context = line_source.line_context()
             if context is not None:
                 # Before-text only: the screen's after-text is unreliable in TUIs.
-                shaped = normalise(text, context[0], "")
+                shaped = normalise(text, context[0], "",
+                                   keep_lone_mark=not self.config.get("auto_punctuation", True))
                 print(f"[whisper-dictate] one-shot: screen before={context[0][-40:]!r} "
                       f"after={context[1][:20]!r} -> {shaped!r}")
                 text = shaped
@@ -1518,7 +1531,8 @@ class WhisperDictate:
             # Straight into the agent's prompt line, shaped by the text around
             # the cursor; falls back to keystrokes if the line can't be used.
             try:
-                typed = type_into_line(achat_target, text)
+                typed = type_into_line(achat_target, text,
+                                       keep_lone_mark=not self.config.get("auto_punctuation", True))
             except Exception as e:
                 print(f"[whisper-dictate] achat typing failed: {e}")
                 typed = False
@@ -1786,6 +1800,12 @@ class WhisperDictate:
         remote_item.connect("toggled", self.on_remote_toggled)
         menu.append(remote_item)
         self.remote_item = remote_item
+
+        auto_punctuation_item = Gtk.CheckMenuItem(label="Auto punctuation")
+        auto_punctuation_item.set_active(self.config.get("auto_punctuation", True))
+        auto_punctuation_item.connect("toggled", self.on_auto_punctuation_toggled)
+        menu.append(auto_punctuation_item)
+        self.auto_punctuation_item = auto_punctuation_item
         
         # Transcribe file
         transcribe_file_item = Gtk.MenuItem(label="Transcribe File...")
@@ -1883,6 +1903,23 @@ class WhisperDictate:
             msg = "Adjusted non-English model config: " + ", ".join(model_changes)
             print(f"[whisper-dictate] {msg}")
             self.notify(msg)
+
+    def set_auto_punctuation(self, on):
+        """Spoken "auto punctuation on/off", or the tray menu."""
+        on = bool(on)
+        changed = self.config.get("auto_punctuation", True) != on
+        self.config["auto_punctuation"] = on
+        if changed:
+            self.save_config(self.config)
+        print(f"[whisper-dictate] Auto punctuation {'on' if on else 'off'}")
+        item = getattr(self, "auto_punctuation_item", None)
+        if item is not None and item.get_active() != on:
+            item.set_active(on)
+        self.notify(f"Auto punctuation {'on' if on else 'off'}")
+
+    def on_auto_punctuation_toggled(self, item):
+        if item.get_active() != self.config.get("auto_punctuation", True):
+            self.set_auto_punctuation(item.get_active())
 
     def on_remote_toggled(self, item):
         """Enable or disable remote transcription."""
