@@ -102,6 +102,11 @@ Slash commands: an utterance starting with "slash" (or as misheard: "flash", "sp
 book" → `/runbook`). "Less clear." and a written "-clear" only count as the whole utterance
 with a command from `slash_commands`, so "Less clear than before" stays text.
 
+Auto capitalization: "auto capitalization off" (also "capitalisation", "auto caps") types
+everything in lower case except Jira keys (`VDX-283`), which is all an LLM prompt needs;
+"auto capitalization on" switches back. A tray checkbox too; saved as
+`auto_capitalization`.
+
 Shell commands: an utterance that starts with a command from `shell_commands` is typed as a
 command line: lower case, no punctuation, spoken flags written. "L s minus L." → `ls -l`,
 "Git branch." → `git branch`, "Git push dash dash force" → `git push --force`, "Sudo." →

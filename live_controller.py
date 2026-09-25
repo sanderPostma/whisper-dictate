@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-from live_commands import (Command, mentions_command, parse_auto_punctuation, parse_clear, parse_clipboard,
+from live_commands import (Command, mentions_command, parse_auto_setting, parse_clear, parse_clipboard,
                            parse_command, parse_cursor, parse_undo)
 from live_segmenter import ChunkReady, LongPause
 from live_session import Edit
@@ -58,7 +58,7 @@ def select_transcribers(remote_enabled, remote_is_down, remote, local, local_fal
 class LiveController:
     def __init__(self, session, target, fast_transcribe, correct_transcribe=None,
                  make_target=None, postprocess=None, on_error=None, on_done=None, log=print,
-                 on_auto_punctuation=None, is_verbatim=None):
+                 on_setting=None, is_verbatim=None):
         self.session = session
         self.target = target
         self.fast_transcribe = fast_transcribe
@@ -67,7 +67,7 @@ class LiveController:
         self.postprocess = postprocess or (lambda text: text)
         self.on_error = on_error
         self.on_done = on_done
-        self.on_auto_punctuation = on_auto_punctuation
+        self.on_setting = on_setting  # (key, on) for "auto punctuation off" etc.
         # Text typed exactly as heard (a shell command line): never rewritten
         # by a correction that reads it as part of a sentence.
         # A slash command too: a correction would merge it with the next one.
@@ -145,14 +145,14 @@ class LiveController:
             self._report(f"Live transcription failed: {e}")
             return
         text = self.postprocess(raw or "")
-        auto_punctuation = parse_auto_punctuation(text)
-        if auto_punctuation is not None:
-            # A new punctuation mode: no later correction may retype what was
-            # typed under the old one.
+        setting = parse_auto_setting(text)
+        if setting is not None:
+            # A new mode: no later correction may retype what was typed under
+            # the old one.
             self.session.commit()
-            self.log(f"[live] auto punctuation {'on' if auto_punctuation else 'off'} raw={raw!r}")
-            if self.on_auto_punctuation:
-                self.on_auto_punctuation(auto_punctuation)
+            self.log(f"[live] {setting[0]} {'on' if setting[1] else 'off'} raw={raw!r}")
+            if self.on_setting:
+                self.on_setting(*setting)
             return
         if parse_clear(text):
             self._run_clear(raw)

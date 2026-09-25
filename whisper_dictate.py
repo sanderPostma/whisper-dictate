@@ -41,9 +41,9 @@ from asr_models import (
 )
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
-from live_commands import parse_auto_punctuation, parse_clear, parse_clipboard, parse_cursor, parse_undo, split_enter
+from live_commands import parse_auto_setting, parse_clear, parse_clipboard, parse_cursor, parse_undo, split_enter
 from text_fixes import (DEFAULT_SHELL_ALIASES, DEFAULT_SHELL_COMMANDS, DEFAULT_SLASH_COMMANDS, fix_shell_command,
-                        fix_slash_command, fix_ticket_keys, manual_punctuation)
+                        fix_slash_command, fix_ticket_keys, lower_case, manual_punctuation)
 from live_controller import LiveController, select_transcribers
 from live_output import WezTermTarget, XdotoolTarget, choose_target, clipboard_key, is_terminal, press_key
 from live_segmenter import LiveSegmenter
@@ -80,7 +80,7 @@ ICON_DIR = Path(__file__).parent / "icons"
 COMMAND_VOCABULARY = [
     "slash", "command", "command undo", "undo that", "command clear", "scratch that",
     "press enter", "engage", "cursor back", "cursor forward", "period", "comma",
-    "question mark", "auto punctuation", "command paste", "command copy", "command cut",
+    "question mark", "auto punctuation", "auto capitalization", "command paste", "command copy", "command cut",
 ]
 
 DEFAULT_CONFIG = {
@@ -114,6 +114,8 @@ DEFAULT_CONFIG = {
     # Off: the model's punctuation is dropped; say "comma", "period", ...
     # Spoken "auto punctuation on" / "auto punctuation off" switches it.
     "auto_punctuation": True,
+    # Off: everything lower case except Jira keys ("auto capitalization on/off").
+    "auto_capitalization": True,
     # An utterance starting with one of these is typed as a command line: lower
     # case, no punctuation, "minus l" -> "-l" ("L s minus L." -> "ls -l").
     "shell_commands": DEFAULT_SHELL_COMMANDS,
@@ -389,9 +391,13 @@ class WhisperDictate:
         if shell is not None:
             print(f"[post-process] Shell command: |{shell}|")
             return shell
-        if not self.config.get("auto_punctuation", True) and not parse_auto_punctuation(text):
-            text = manual_punctuation(text)
-            print(f"[post-process] Manual punctuation: |{text}|")
+        if parse_auto_setting(text) is None:
+            if not self.config.get("auto_punctuation", True):
+                text = manual_punctuation(text)
+                print(f"[post-process] Manual punctuation: |{text}|")
+            if not self.config.get("auto_capitalization", True):
+                text = lower_case(text)
+                print(f"[post-process] Lower case: |{text}|")
         
         if not replacements:
             print(f"[post-process] No replacements loaded")
@@ -963,9 +969,9 @@ class WhisperDictate:
         # Apply text replacements. Where the line is readable it decides case,
         # so the blunt single-word lowercasing is left out there.
         text = self.apply_replacements(text, lower_single_word=line_source is None)
-        auto_punctuation = parse_auto_punctuation(text)
-        if auto_punctuation is not None:
-            GLib.idle_add(lambda: self.set_auto_punctuation(auto_punctuation) or self.update_status("Ready"))
+        setting = parse_auto_setting(text)
+        if setting is not None:
+            GLib.idle_add(lambda: self.set_setting(*setting) or self.update_status("Ready"))
             return
         if parse_clear(text):
             GLib.idle_add(lambda: self._oneshot_clear(line_source))
@@ -1076,7 +1082,7 @@ class WhisperDictate:
                 text, lower_single_word=False, strip_trailing_period=False),
             on_error=lambda msg: GLib.idle_add(lambda: self.notify(msg) or False),
             is_verbatim=lambda text: self.shell_command(text) is not None,
-            on_auto_punctuation=lambda on: GLib.idle_add(lambda: self.set_auto_punctuation(on) or False),
+            on_setting=lambda key, on: GLib.idle_add(lambda: self.set_setting(key, on) or False),
             on_done=lambda: GLib.idle_add(self._live_done),
         )
         controller.start()
@@ -1870,6 +1876,14 @@ class WhisperDictate:
         auto_punctuation_item.connect("toggled", self.on_auto_punctuation_toggled)
         menu.append(auto_punctuation_item)
         self.auto_punctuation_item = auto_punctuation_item
+
+        auto_capitalization_item = Gtk.CheckMenuItem(label="Auto capitalization")
+        auto_capitalization_item.set_active(self.config.get("auto_capitalization", True))
+        auto_capitalization_item.connect(
+            "toggled", lambda item: item.get_active() != self.config.get("auto_capitalization", True)
+            and self.set_setting("auto_capitalization", item.get_active()))
+        menu.append(auto_capitalization_item)
+        self.auto_capitalization_item = auto_capitalization_item
         
         # Transcribe file
         transcribe_file_item = Gtk.MenuItem(label="Transcribe File...")
@@ -1968,18 +1982,22 @@ class WhisperDictate:
             print(f"[whisper-dictate] {msg}")
             self.notify(msg)
 
-    def set_auto_punctuation(self, on):
-        """Spoken "auto punctuation on/off", or the tray menu."""
+    def set_setting(self, key, on):
+        """Spoken "auto punctuation / capitalization on/off", or the tray menu."""
         on = bool(on)
-        changed = self.config.get("auto_punctuation", True) != on
-        self.config["auto_punctuation"] = on
+        changed = self.config.get(key, True) != on
+        self.config[key] = on
         if changed:
             self.save_config(self.config)
-        print(f"[whisper-dictate] Auto punctuation {'on' if on else 'off'}")
-        item = getattr(self, "auto_punctuation_item", None)
+        label = f"{key.replace('_', ' ').capitalize()} {'on' if on else 'off'}"
+        print(f"[whisper-dictate] {label}")
+        item = getattr(self, key + "_item", None)
         if item is not None and item.get_active() != on:
             item.set_active(on)
-        self.notify(f"Auto punctuation {'on' if on else 'off'}")
+        self.notify(label)
+
+    def set_auto_punctuation(self, on):
+        self.set_setting("auto_punctuation", on)
 
     def on_auto_punctuation_toggled(self, item):
         if item.get_active() != self.config.get("auto_punctuation", True):

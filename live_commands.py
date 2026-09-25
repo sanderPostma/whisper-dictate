@@ -52,18 +52,27 @@ _CLEAR_RE = re.compile(
 )
 
 
-_AUTO_PUNCT_RE = re.compile(
-    r"^\s*auto(?:matic)?[\s-]*punctuation[\s,:]+(on|off|of)[\s.!,]*$", re.IGNORECASE)
+_AUTO_SETTING_RE = re.compile(
+    r"^\s*auto(?:matic)?[\s-]*(punctuation|capitali[sz]ation|caps|capitals)[\s,:]+(on|off|of)[\s.!,]*$",
+    re.IGNORECASE)
 _LONE_MARK_RE = re.compile(r"^\s*([.?!,])\s*$")
 
 
-def parse_auto_punctuation(text):
-    """True / False for "auto punctuation on" / "off" said as the whole
-    utterance ("of" is how the model tends to hear "off"), else None."""
-    m = _AUTO_PUNCT_RE.match(text or "")
+def parse_auto_setting(text):
+    """("auto_punctuation" | "auto_capitalization", on) for "auto punctuation
+    on/off" / "auto capitalization on/off" said as the whole utterance ("of"
+    is how the model tends to hear "off"), else None."""
+    m = _AUTO_SETTING_RE.match(text or "")
     if not m:
         return None
-    return m.group(1).lower() == "on"
+    key = "auto_punctuation" if m.group(1).lower() == "punctuation" else "auto_capitalization"
+    return key, m.group(2).lower() == "on"
+
+
+def parse_auto_punctuation(text):
+    """True / False for "auto punctuation on" / "off", else None."""
+    setting = parse_auto_setting(text)
+    return setting[1] if setting and setting[0] == "auto_punctuation" else None
 
 
 _CLIPBOARD_RE = re.compile(r"^\s*" + _CMD + r"(paste|copy|cut)[\s.!,]*$", re.IGNORECASE)
@@ -119,7 +128,7 @@ def mentions_command(text):
     punctuation), as in a correction that heard a command the fast pass missed."""
     if _LONE_MARK_RE.match(text or ""):
         return False  # model noise in a correction, not a command
-    return (parse_command(text) is not None or parse_auto_punctuation(text) is not None
+    return (parse_command(text) is not None or parse_auto_setting(text) is not None
             or parse_clipboard(text) is not None or parse_undo(text) or parse_clear(text)
             or parse_cursor(text) is not None
             or bool(_SET_OFF_RE.search(text or "")))

@@ -162,6 +162,19 @@ def _manual_line(line):
     return " ".join(out)
 
 
+_TICKET_KEY = re.compile(r"\b[A-Z][A-Z0-9]*-\d+\b")
+
+
+def lower_case(text):
+    """All lower case, except Jira keys ("VDX-283"): for typing to an LLM."""
+    text = text or ""
+    out, pos = [], 0
+    for m in _TICKET_KEY.finditer(text):
+        out += [text[pos:m.start()].lower(), m.group(0)]
+        pos = m.end()
+    return "".join(out) + text[pos:].lower()
+
+
 def manual_punctuation(text):
     """Text with the model's punctuation removed and spoken marks written."""
     return "\n".join(_manual_line(line) for line in (text or "").split("\n"))

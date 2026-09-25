@@ -133,7 +133,7 @@ class LiveToggleTests(unittest.TestCase):
 
         results = ["Hello there.", "Auto punctuation off."]
         ctl = LiveController(LiveSession(), Target(), lambda audio, prompt: results.pop(0),
-                             log=lambda *_: None, on_auto_punctuation=toggles.append)
+                             log=lambda *_: None, on_setting=lambda key, on: toggles.append(on))
         audio = np.zeros(16000, dtype=np.float32)
         ctl.process(ChunkReady(audio, 0.0, 1.0))
         ctl.process(ChunkReady(audio, 1.0, 2.0))
