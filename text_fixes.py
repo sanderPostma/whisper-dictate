@@ -27,9 +27,11 @@ _SEPARATOR = re.compile(r"[\s,]*(?:(?:-|–|dash|hyphen|minus)(?![A-Za-z])[\s,]*
 _TOKEN = re.compile(r"(?:[\s,]+|[\s,]*[-–][\s,]*)?(\d+|[A-Za-z]+)")
 
 
-def _key_pattern(key):
-    letters = r"\.?[\s.]*".join(re.escape(c) for c in key)
-    return re.compile(r"(?<![A-Za-z0-9])" + letters + r"\.?(?![A-Za-z0-9])", re.IGNORECASE)
+def _key_pattern(key, aliases=()):
+    letters = r"\.?[\s.]*".join(re.escape(c) for c in key) + r"\.?"
+    spoken = [re.escape(a).replace(r"\ ", r"\s+") for a in aliases if a.strip()]
+    body = "|".join([letters, *spoken])
+    return re.compile(r"(?<![A-Za-z0-9])(?:" + body + r")(?![A-Za-z0-9])", re.IGNORECASE)
 
 
 def _read_number(text, pos):
@@ -80,11 +82,16 @@ def _read_number(text, pos):
     return "".join(p[0] for p in parts), parts[-1][1]
 
 
-def fix_ticket_keys(text, keys):
-    """Rewrite spoken ticket keys for the given project keys to KEY-123."""
+def fix_ticket_keys(text, keys, aliases=None):
+    """Rewrite spoken ticket keys for the given project keys to KEY-123.
+
+    aliases: {"VDX": ["videx", ...]} - how the model writes a key it did not
+    spell out. Like the letters, they only count when a number follows.
+    """
+    aliases = {k.upper(): v for k, v in (aliases or {}).items()}
     for key in keys or ():
         key = key.upper()
-        pattern = _key_pattern(key)
+        pattern = _key_pattern(key, aliases.get(key, ()))
         out, pos = [], 0
         for m in pattern.finditer(text):
             if m.start() < pos:

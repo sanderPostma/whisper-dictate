@@ -81,6 +81,8 @@ not undone.
 Jira keys: list your project keys in `ticket_keys` (e.g. `["VDX"]`) and spoken keys are
 written properly: "v D X dash two eight three", "VDX two eighty three" and the misheard
 "v D X dash two A three" all become `VDX-283`. Only text after one of your keys is touched.
+`ticket_aliases` adds how the model writes a key it did not spell out, e.g.
+`{"VDX": ["videx"]}` turns "videx two for two" into `VDX-242` (only when a number follows).
 
 ## Live dictation
 

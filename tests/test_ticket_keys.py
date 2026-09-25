@@ -49,6 +49,14 @@ class TicketKeyTests(unittest.TestCase):
         self.assertEqual(fix("VDX two eight three is done"), "VDX-283 is done")
         self.assertEqual(fix("VDX 283 for review"), "VDX-283 for review")
 
+    def test_spoken_alias_from_the_log(self):
+        # Seen live: the correction wrote "videx two for two" for VDX-242.
+        aliases = {"VDX": ["videx", "vidix", "vedex"]}
+        self.assertEqual(fix_ticket_keys("Look at videx two for two.", ["VDX"], aliases),
+                         "Look at VDX-242.")
+        self.assertEqual(fix_ticket_keys("Vidix dash 283", ["VDX"], aliases), "VDX-283")
+        self.assertEqual(fix_ticket_keys("The Videx brand", ["VDX"], aliases), "The Videx brand")
+
     def test_no_keys_configured(self):
         self.assertEqual(fix_ticket_keys("v D X dash two", []), "v D X dash two")
 

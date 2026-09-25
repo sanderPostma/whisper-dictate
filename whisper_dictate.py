@@ -101,6 +101,8 @@ DEFAULT_CONFIG = {
     "live_max_command_backspace": 300,
     # Jira project keys: spoken "v D X dash two eight three" becomes VDX-283.
     "ticket_keys": [],
+    # How the model writes a key it did not spell out, e.g. {"VDX": ["videx"]}.
+    "ticket_aliases": {},
     "live_corrections": True,
     "live_committed_context_chars": 400,
     "remote_server": {
@@ -340,7 +342,8 @@ class WhisperDictate:
         """Apply text replacements (case-insensitive matching)."""
         replacements = self.load_replacements()
         print(f"[post-process] IN:  |{text}|")
-        fixed = fix_ticket_keys(text, self.config.get("ticket_keys", []))
+        fixed = fix_ticket_keys(text, self.config.get("ticket_keys", []),
+                                self.config.get("ticket_aliases", {}))
         if fixed != text:
             print(f"[post-process] Ticket keys: |{fixed}|")
             text = fixed
