@@ -289,11 +289,12 @@ class LiveSession:
     def _repaired(self, history, command, line):
         """History with a join or comma repair and the chunk's words appended."""
         base = history
-        end_at = re.search(r"[.?!]\s*$", base)
+        # Any mark the line ends with gives way to the spoken one.
+        end_at = re.search(r"[.?!,;:]\s*$", base)
         if command.comma:
             if end_at:
                 base = base[:end_at.start()] + "," + base[end_at.start() + 1:]
-            elif base and not base.rstrip().endswith(","):
+            elif base:
                 base = base.rstrip() + ","
         elif command.end and end_at:
             base = base[:end_at.start()] + base[end_at.start() + 1:]

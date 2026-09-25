@@ -278,13 +278,16 @@ class LiveController:
 
     def _run_command(self, command, raw):
         """A spoken repair: one edit over what this session typed."""
-        self._verify_history()
+        # A mark only changes the last character or two: seeing our text at
+        # the end of an input row is enough where the cursor row is unreliable.
+        marks_only = not command.rest and not command.scratch
+        self._verify_history(marks_only=marks_only)
         edit = self.session.apply_command(command)
         self.log(f"[live] command {command} raw={raw!r} -> {_show(edit)}")
         if edit is not None:
             self._send(edit)
 
-    def _verify_history(self):
+    def _verify_history(self, marks_only=False):
         """Keep only history a command may still rewrite.
 
         Exact line (achat): the history must still be exactly what precedes
@@ -315,6 +318,11 @@ class LiveController:
         else:
             last = s.history.split("\n")[-1]
             ok = bool(before) and bool(last) and (last.endswith(before) or before.endswith(last))
+        if not ok and marks_only and s.history and not exact:
+            shows = getattr(self.target, "shows_line_end", None)
+            ok = bool(shows and shows(s.history))
+            if ok:
+                self.log("[live] cursor row differs, but the screen shows our text; mark repair allowed")
         if not ok:
             if s.history:
                 self.log("[live] line changed since we typed; commands will not edit it")

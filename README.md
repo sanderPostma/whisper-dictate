@@ -134,7 +134,7 @@ Spoken repairs, for when a thinking pause put a full stop in the middle of a sen
 
 | Say | Where | Effect |
 |---|---|---|
-| "… period" / "full stop" / "question mark" / "exclamation mark" | end of a chunk | join it to the previous chunk (the stray `.` goes, lowercase) and end it so |
+| "… period" / "full stop" / "question mark" / "exclamation mark" | end of a chunk | join it to the previous chunk (the stray `.` goes, lowercase) and end it so; said alone, it replaces the mark the text ends with (`.` `,` `;` `:`) or adds one |
 | "comma …" | start of a chunk | the previous `.` becomes `,` and the chunk continues the sentence |
 | "scratch that" (also heard as "stretch that"; or "scratch" alone) | end of a chunk | delete the current sentence (or the one just finished) |
 | "command clear", "command clear line", "scratch all", "scratch whole line" | whole utterance | clear the whole input line, typed text included (achat and WezTerm panes) |
@@ -149,7 +149,9 @@ Repairs only ever rewrite what live dictation typed itself, up to
 `live_max_command_backspace` characters: in achat prompts the line must still end with
 exactly that text; in other WezTerm panes the cursor row must still show it; in other
 windows (xdotool) a repair only reaches back within the current correction window, since
-you may have typed elsewhere during a pause.
+you may have typed elsewhere during a pause. A mark said alone ("question mark") in a WezTerm pane is also
+allowed when the text shows at the end of a row near the bottom of the screen: TUIs like
+Claude Code draw their own cursor, so the terminal's cursor row can be another row.
 
 Config keys: `live_pause_ms`, `live_max_chunk_s`, `live_window_max_s`,
 `live_commit_pause_ms`, `live_max_backspace`, `live_max_command_backspace`, `live_corrections`,

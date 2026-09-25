@@ -156,6 +156,31 @@ class WezTermTarget:
             return False
         return res.returncode == 0
 
+    SCREEN_ROWS = 15  # the input box sits near the bottom of the pane
+
+    @staticmethod
+    def line_end_in(screen, text, rows=SCREEN_ROWS, tail_chars=24, min_chars=6):
+        """Whether one of the last rows of screen ends with the end of text."""
+        tail = (text or "").split("\n")[-1][-tail_chars:].strip()
+        if len(tail) < min_chars:
+            return False
+        lines = [r.rstrip() for r in (screen or "").split("\n") if r.strip()]
+        return any(r.endswith(tail) for r in lines[-rows:])
+
+    def shows_line_end(self, text):
+        """Whether the pane shows text at the end of a row near the bottom.
+
+        For small repairs only (a punctuation mark): a TUI like Claude Code
+        draws its own cursor, so the cursor row read by line_context can be
+        another row than the input line.
+        """
+        try:
+            res = self._run(["wezterm", "cli", "get-text", "--pane-id", str(self.pane_id)],
+                            capture_output=True, text=True, timeout=2)
+        except Exception:
+            return False
+        return res.returncode == 0 and self.line_end_in(res.stdout, text)
+
     def line_context(self):
         """Text before the cursor, read off the screen. The text after it is left
         out: a TUI's hardware cursor can sit off the input row, so what follows

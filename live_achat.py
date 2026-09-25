@@ -364,6 +364,10 @@ class AchatTarget:
         self._log(f"[live] achat draft Unknown; typed as keys ({'ok' if ok else 'failed'})")
         return ok
 
+    def shows_line_end(self, text):
+        """Screen check for small repairs while the draft is Unknown."""
+        return self._screen.shows_line_end(text)
+
     def line_context(self, adopt_rev=True):
         """(text before the cursor, text after it) on a Known line, else None.
 
