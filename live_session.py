@@ -234,6 +234,7 @@ class LiveSession:
         None when there is no step to undo or the edit would be too long.
         """
         if not self._undo:
+            self.commit()  # the command's audio must never reach a correction
             return None
         line = self.committed_text + self.typed_window
         self.commit()

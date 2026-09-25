@@ -11,7 +11,7 @@ from live_commands import mentions_command, parse_clipboard
 from live_controller import LiveController
 from live_output import WezTermTarget, XdotoolTarget, choose_target, clipboard_key
 from live_segmenter import ChunkReady
-from live_session import LiveSession
+from live_session import Edit, LiveSession
 
 
 class ParseClipboardTests(unittest.TestCase):
@@ -55,7 +55,7 @@ class ClipboardKeyTests(unittest.TestCase):
 
 
 class LiveClipboardTests(unittest.TestCase):
-    def test_paste_forgets_history_and_types_nothing(self):
+    def test_paste_forgets_history_and_types_only_a_space(self):
         actions, edits = [], []
 
         class Target:
@@ -79,8 +79,24 @@ class LiveClipboardTests(unittest.TestCase):
         ctl.process(ChunkReady(audio, 0.0, 1.0))
         ctl.process(ChunkReady(audio, 1.0, 2.0))
         self.assertEqual(actions, ["paste"])
-        self.assertEqual(len(edits), 1)
+        self.assertEqual(edits[1:], [Edit(0, " ")])  # a space, then the paste
         self.assertEqual(ctl.session.history, "")
+
+
+class OneShotPasteTests(unittest.TestCase):
+    def test_space_before_a_paste_after_a_word(self):
+        import whisper_dictate
+        a = object.__new__(whisper_dictate.WhisperDictate)
+        a.config = {}
+        a.update_status = lambda status: None
+        sent, pressed = [], []
+        source = mock.Mock()
+        source.line_context = lambda: ("See this", "")
+        source.send = lambda edit: sent.append(edit) or True
+        source.clipboard = lambda action: pressed.append(action) or True
+        with mock.patch("builtins.print"):
+            a._oneshot_clipboard(source, "paste")
+        self.assertEqual((sent, pressed), ([Edit(0, " ")], ["paste"]))
 
 
 if __name__ == "__main__":

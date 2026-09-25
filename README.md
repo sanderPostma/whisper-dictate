@@ -81,8 +81,9 @@ not undone.
 Clipboard, said as a whole utterance: "command paste", "command copy", "command cut" press
 Ctrl+V / Ctrl+C / Ctrl+X in the focused window. In terminals (WezTerm, GNOME Terminal,
 kitty, ...) that is Ctrl+Shift+V / Ctrl+Shift+C instead, since Ctrl+C would interrupt the
-program; cut does nothing there. After a paste or cut, live dictation does not rewrite
-anything typed before it.
+program; cut does nothing there. A paste right after a word or mark gets a space first
+(where the text before the cursor is known). After a paste or cut, live dictation does not
+rewrite anything typed before it.
 
 Jira keys: list your project keys in `ticket_keys` (e.g. `["VDX"]`) and spoken keys are
 written properly: "v D X dash two eight three", "VDX two eighty three" and the misheard
@@ -166,9 +167,10 @@ Repairs only ever rewrite what live dictation typed itself, up to
 `live_max_command_backspace` characters: in achat prompts the line must still end with
 exactly that text; in other WezTerm panes the cursor row must still show it; in other
 windows (xdotool) a repair only reaches back within the current correction window, since
-you may have typed elsewhere during a pause. A mark said alone ("question mark") in a WezTerm pane is also
-allowed when the text shows at the end of a row near the bottom of the screen: TUIs like
-Claude Code draw their own cursor, so the terminal's cursor row can be another row.
+you may have typed elsewhere during a pause. In a WezTerm pane a repair is also allowed when the end of the
+typed text shows at the end of a row near the bottom of the screen (the last 24 characters
+for a mark, 40 for anything that deletes words): TUIs like Claude Code draw their own cursor
+and redraw while an agent works, so the terminal's cursor row is often another row.
 
 Config keys: `live_pause_ms`, `live_max_chunk_s`, `live_window_max_s`,
 `live_commit_pause_ms`, `live_max_backspace`, `live_max_command_backspace`, `live_corrections`,

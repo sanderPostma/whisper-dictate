@@ -1511,6 +1511,14 @@ class WhisperDictate:
 
     def _oneshot_clipboard(self, line_source, action):
         """"command paste / copy / cut": the focused window's clipboard keys."""
+        if action == "paste" and line_source is not None:
+            # Right after a word: a space first, so the pasted text is not glued on.
+            try:
+                context = line_source.line_context()
+            except Exception:
+                context = None
+            if context and context[0] and not context[0][-1].isspace():
+                line_source.send(Edit(0, " "))
         press = getattr(line_source, "clipboard", None)
         if press is not None:
             ok = press(action)

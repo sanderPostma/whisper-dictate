@@ -15,6 +15,7 @@ import numpy as np
 from live_commands import (Command, mentions_command, parse_auto_punctuation, parse_clear, parse_clipboard,
                            parse_command, parse_cursor, parse_undo)
 from live_segmenter import ChunkReady, LongPause
+from live_session import Edit
 
 _STOP = object()
 
@@ -254,7 +255,18 @@ class LiveController:
     def _run_clipboard(self, action, raw):
         """Paste / copy / cut with the window's keys. Paste and cut change the
         line with text this session did not type: nothing before them may be
-        rewritten after them."""
+        rewritten after them. A paste right after a word gets a space first."""
+        if action == "paste":
+            before = self.session.committed_text + self.session.typed_window
+            if not before:
+                line_context = getattr(self.target, "line_context", None)
+                try:
+                    context = line_context() if line_context else None
+                except Exception:
+                    context = None
+                before = context[0] if context else ""
+            if before and not before[-1].isspace():
+                self._send(Edit(0, " "))
         self.session.commit()
         if action != "copy":
             self.session.forget_history()
@@ -296,8 +308,8 @@ class LiveController:
 
     def _run_command(self, command, raw):
         """A spoken repair: one edit over what this session typed."""
-        # A mark only changes the last character or two: seeing our text at
-        # the end of an input row is enough where the cursor row is unreliable.
+        # A mark only changes the last character or two: a short tail of our
+        # text at the end of an input row is enough to go on.
         marks_only = not command.rest and not command.scratch
         self._verify_history(marks_only=marks_only)
         edit = self.session.apply_command(command)
@@ -336,11 +348,16 @@ class LiveController:
         else:
             last = s.history.split("\n")[-1]
             ok = bool(before) and bool(last) and (last.endswith(before) or before.endswith(last))
-        if not ok and marks_only and s.history and not exact:
+        if not ok and s.history and not exact:
+            # A TUI like Claude Code draws its own cursor and, while an agent
+            # works, redraws the screen: the terminal's cursor row is then
+            # often another row. Our text at the end of a row near the bottom
+            # of the pane is enough: a short tail for a mark, a long one for
+            # anything that deletes words.
             shows = getattr(self.target, "shows_line_end", None)
-            ok = bool(shows and shows(s.history))
+            ok = bool(shows and shows(s.history, tail_chars=24 if marks_only else 40))
             if ok:
-                self.log("[live] cursor row differs, but the screen shows our text; mark repair allowed")
+                self.log("[live] cursor row differs, but the screen shows our text at a row end")
         if not ok:
             if s.history:
                 self.log("[live] line changed since we typed; commands will not edit it")

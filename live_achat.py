@@ -367,9 +367,9 @@ class AchatTarget:
     def clipboard(self, action):
         return self._screen.clipboard(action)
 
-    def shows_line_end(self, text):
-        """Screen check for small repairs while the draft is Unknown."""
-        return self._screen.shows_line_end(text)
+    def shows_line_end(self, text, tail_chars=24):
+        """Screen check for repairs while the draft is Unknown."""
+        return self._screen.shows_line_end(text, tail_chars=tail_chars)
 
     def line_context(self, adopt_rev=True):
         """(text before the cursor, text after it) on a Known line, else None.

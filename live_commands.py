@@ -120,7 +120,8 @@ def mentions_command(text):
     if _LONE_MARK_RE.match(text or ""):
         return False  # model noise in a correction, not a command
     return (parse_command(text) is not None or parse_auto_punctuation(text) is not None
-            or parse_clipboard(text) is not None
+            or parse_clipboard(text) is not None or parse_undo(text) or parse_clear(text)
+            or parse_cursor(text) is not None
             or bool(_SET_OFF_RE.search(text or "")))
 
 

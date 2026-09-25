@@ -199,7 +199,7 @@ class WezTermTarget:
         lines = [r.rstrip() for r in (screen or "").split("\n") if r.strip()]
         return any(r.endswith(tail) for r in lines[-rows:])
 
-    def shows_line_end(self, text):
+    def shows_line_end(self, text, tail_chars=24):
         """Whether the pane shows text at the end of a row near the bottom.
 
         For small repairs only (a punctuation mark): a TUI like Claude Code
@@ -211,7 +211,7 @@ class WezTermTarget:
                             capture_output=True, text=True, timeout=2)
         except Exception:
             return False
-        return res.returncode == 0 and self.line_end_in(res.stdout, text)
+        return res.returncode == 0 and self.line_end_in(res.stdout, text, tail_chars=tail_chars)
 
     def line_context(self):
         """Text before the cursor, read off the screen. The text after it is left

@@ -57,8 +57,8 @@ class ScreenTarget:
     def line_context(self):
         return ("Press up to edit queued messages", "")
 
-    def shows_line_end(self, text):
-        return WezTermTarget.line_end_in(self.screen, text)
+    def shows_line_end(self, text, tail_chars=24):
+        return WezTermTarget.line_end_in(self.screen, text, tail_chars=tail_chars)
 
 
 class ScreenFallbackTests(unittest.TestCase):
@@ -79,9 +79,48 @@ class ScreenFallbackTests(unittest.TestCase):
         edits = self.run_chunks("> \n\n  status bar\n", "Can you fix that.", "Question mark.")
         self.assertEqual(len(edits), 1)
 
-    def test_scratch_still_needs_the_cursor_row(self):
+    def test_scratch_allowed_when_the_screen_shows_the_text(self):
+        # Claude Code redraws while an agent works: the cursor row is often another row.
         edits = self.run_chunks("> can you fix that.\n", "Can you fix that.", "Scratch that.")
+        self.assertEqual(edits[-1], Edit(18, ""))
+
+    def test_scratch_needs_a_long_enough_tail_at_a_row_end(self):
+        typed = "We will first insert a space when not at the beginning of the sentence"
+        edits = self.run_chunks("> " + typed[-30:] + "\n", typed, "Scratch that.")
         self.assertEqual(len(edits), 1)
+
+    def test_failed_undo_never_types_the_command(self):
+        target = ScreenTarget("")
+        results = ["Command undo.", "Command undo."]
+        ctl = LiveController(LiveSession(), target, lambda audio, prompt: results.pop(0),
+                             lambda audio, prompt: results.pop(0), log=lambda *_: None)
+        ctl.process(chunk(0.0, 1.0))
+        ctl.correct()
+        self.assertEqual(target.edits, [])
+
+
+class PasteSpaceTests(unittest.TestCase):
+    def run_paste(self, *typed):
+        target = ScreenTarget("")
+        target.clipboard = lambda action: target.edits.append(action) or True
+        results = [*typed, "Command paste."]
+        ctl = LiveController(LiveSession(), target, lambda audio, prompt: results.pop(0),
+                             log=lambda *_: None)
+        for i in range(len(typed) + 1):
+            ctl.process(chunk(float(i), i + 1.0))
+        return target.edits
+
+    def test_space_before_a_paste_after_text(self):
+        self.assertEqual(self.run_paste("See this.")[-2:], [Edit(0, " "), "paste"])
+
+    def test_no_space_after_a_space(self):
+        target = ScreenTarget("")
+        target.line_context = lambda: ("See this ", "")
+        target.clipboard = lambda action: target.edits.append(action) or True
+        ctl = LiveController(LiveSession(), target, lambda audio, prompt: "Command paste.",
+                             log=lambda *_: None)
+        ctl.process(chunk(0.0, 1.0))
+        self.assertEqual(target.edits, ["paste"])
 
 
 class LineEndInTests(unittest.TestCase):
