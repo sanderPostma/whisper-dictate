@@ -65,6 +65,14 @@ class OneShotOutputTests(unittest.TestCase):
         self.assertEqual(a.apply_replacements("API"), "api")
 
 
+class TicketKeyPostprocessTests(unittest.TestCase):
+    def test_ticket_keys_fixed_even_without_replacements(self):
+        a = app(ticket_keys=["VDX"])
+        a.load_replacements = lambda: {}
+        with mock.patch("builtins.print"):
+            self.assertEqual(a.apply_replacements("Look at v D X dash two A three"), "Look at VDX-283")
+
+
 class ScreenContextTests(unittest.TestCase):
     """A WezTerm pane without achat: case and spacing from the screen, typed with keys."""
 

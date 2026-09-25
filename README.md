@@ -78,6 +78,10 @@ Typical use: a word came out wrong, say "undo that" and repeat it. Live mode, an
 achat prompts (the line must still end with exactly that text). Enter and cursor moves are
 not undone.
 
+Jira keys: list your project keys in `ticket_keys` (e.g. `["VDX"]`) and spoken keys are
+written properly: "v D X dash two eight three", "VDX two eighty three" and the misheard
+"v D X dash two A three" all become `VDX-283`. Only text after one of your keys is touched.
+
 ## Live dictation
 
 Press the dictation hotkey (`<Alt>d`) twice within a second (double beep), or pick

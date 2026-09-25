@@ -42,6 +42,7 @@ from asr_models import (
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
 from live_commands import parse_clear, parse_cursor, parse_undo, split_enter
+from text_fixes import fix_ticket_keys
 from live_controller import LiveController, select_transcribers
 from live_output import WezTermTarget, XdotoolTarget, choose_target
 from live_segmenter import LiveSegmenter
@@ -98,6 +99,8 @@ DEFAULT_CONFIG = {
     "live_commit_pause_ms": 1200,
     "live_max_backspace": 80,
     "live_max_command_backspace": 300,
+    # Jira project keys: spoken "v D X dash two eight three" becomes VDX-283.
+    "ticket_keys": [],
     "live_corrections": True,
     "live_committed_context_chars": 400,
     "remote_server": {
@@ -337,6 +340,10 @@ class WhisperDictate:
         """Apply text replacements (case-insensitive matching)."""
         replacements = self.load_replacements()
         print(f"[post-process] IN:  |{text}|")
+        fixed = fix_ticket_keys(text, self.config.get("ticket_keys", []))
+        if fixed != text:
+            print(f"[post-process] Ticket keys: |{fixed}|")
+            text = fixed
         
         if not replacements:
             print(f"[post-process] No replacements loaded")
