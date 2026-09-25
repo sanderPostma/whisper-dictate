@@ -1038,7 +1038,7 @@ class WhisperDictate:
             self.beep_double()
         else:
             self.beep_start()
-        self.update_icon(True)
+        self.update_icon(True, steady=True)
         suffix = "" if correct else " (no corrections)"
         self.update_status(f"⚡ Live → {target.name}{suffix}")
         print(f"[whisper-dictate] Live dictation started: {target.name}, corrections={correct is not None}")
@@ -1610,8 +1610,13 @@ class WhisperDictate:
         self._set_icon("mic-recording" if self._blink_state else "mic-idle")
         return True
 
-    def update_icon(self, recording):
-        """Update tray icon. Blinks while recording, static idle otherwise."""
+    def update_icon(self, recording, steady=False):
+        """Update tray icon: blinking red while recording one-shot, steady red
+        during live dictation (steady=True), idle otherwise."""
+        if recording and steady:
+            self._stop_blinking()
+            self._set_icon("mic-recording")
+            return
         if recording:
             if getattr(self, "_blink_timer_id", None):
                 return
@@ -1619,13 +1624,16 @@ class WhisperDictate:
             self._blink_tick()
             self._blink_timer_id = GLib.timeout_add(500, self._blink_tick)
         else:
-            if getattr(self, "_blink_timer_id", None):
-                try:
-                    GLib.source_remove(self._blink_timer_id)
-                except Exception:
-                    pass
-                self._blink_timer_id = None
+            self._stop_blinking()
             self._set_icon("mic-idle")
+
+    def _stop_blinking(self):
+        if getattr(self, "_blink_timer_id", None):
+            try:
+                GLib.source_remove(self._blink_timer_id)
+            except Exception:
+                pass
+            self._blink_timer_id = None
     
     def update_status(self, status):
         """Update status in menu."""
