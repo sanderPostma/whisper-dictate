@@ -69,7 +69,9 @@ class LiveController:
         self.on_auto_punctuation = on_auto_punctuation
         # Text typed exactly as heard (a shell command line): never rewritten
         # by a correction that reads it as part of a sentence.
-        self.is_verbatim = is_verbatim or (lambda text: False)
+        # A slash command too: a correction would merge it with the next one.
+        is_verbatim = is_verbatim or (lambda text: False)
+        self.is_verbatim = lambda text: text.lstrip().startswith("/") or is_verbatim(text)
         self.log = log
         self.corrections_enabled = correct_transcribe is not None
         self._jobs = queue.Queue()

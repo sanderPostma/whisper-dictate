@@ -77,9 +77,11 @@ def normalise(raw, before, after="", keep_lone_mark=False):
             low = text[0].lower()
             if len(low) == 1:  # "İ".lower() grows a combining mark
                 text = low + text[1:]
-    if before and not before.endswith((" ", "\n")) and not text.startswith(("\n", ",", ".", "?", "!", ";", ":")):
+    # No space before a slash command either: after a space the CLI takes it
+    # as text instead of running it.
+    if before and not before.endswith((" ", "\n")) and not text.startswith(("\n", ",", ".", "?", "!", ";", ":", "/")):
         text = " " + text
-    if is_slash_command(before.split("\n")[-1] + text):
+    if text.startswith("/") or is_slash_command(before.split("\n")[-1] + text):
         text = text.rstrip(".?!")
     if after[:1].isalnum():
         # Mid-sentence: an utterance-final full stop would split the sentence.

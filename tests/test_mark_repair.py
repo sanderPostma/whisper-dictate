@@ -95,5 +95,20 @@ class LineEndInTests(unittest.TestCase):
         self.assertFalse(WezTermTarget.line_end_in("❯ ok\n", "ok"))
 
 
+class SlashCommandTests(unittest.TestCase):
+    def test_no_leading_space_before_a_slash_command(self):
+        from live_session import normalise
+        self.assertEqual(normalise("/clear.", "Press up to edit queued messages"), "/clear")
+        self.assertEqual(normalise("/compact", "some text"), "/compact")
+
+    def test_slash_command_closes_the_correction_window(self):
+        target = ScreenTarget("")
+        ctl = LiveController(LiveSession(), target, lambda audio, prompt: "/clear",
+                             log=lambda *_: None)
+        ctl.process(chunk(0.0, 1.0))
+        self.assertEqual(ctl.session.chunk_count, 0)
+        self.assertEqual(target.edits, [Edit(0, "/clear")])
+
+
 if __name__ == "__main__":
     unittest.main()
