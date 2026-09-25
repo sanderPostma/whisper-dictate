@@ -66,6 +66,16 @@ def parse_auto_punctuation(text):
     return m.group(1).lower() == "on"
 
 
+_CLIPBOARD_RE = re.compile(r"^\s*" + _CMD + r"(paste|copy|cut)[\s.!,]*$", re.IGNORECASE)
+
+
+def parse_clipboard(text):
+    """"paste" / "copy" / "cut" for "command paste" etc. said as the whole
+    utterance, else None."""
+    m = _CLIPBOARD_RE.match(text or "")
+    return m.group(1).lower() if m else None
+
+
 def parse_clear(text):
     """Whether the whole utterance asks to clear the whole line
     ("command clear", "command clear line", "scratch all", "scratch whole line")."""
@@ -110,6 +120,7 @@ def mentions_command(text):
     if _LONE_MARK_RE.match(text or ""):
         return False  # model noise in a correction, not a command
     return (parse_command(text) is not None or parse_auto_punctuation(text) is not None
+            or parse_clipboard(text) is not None
             or bool(_SET_OFF_RE.search(text or "")))
 
 

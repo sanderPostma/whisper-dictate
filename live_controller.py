@@ -12,8 +12,8 @@ import time
 
 import numpy as np
 
-from live_commands import (Command, mentions_command, parse_auto_punctuation, parse_clear, parse_command,
-                           parse_cursor, parse_undo)
+from live_commands import (Command, mentions_command, parse_auto_punctuation, parse_clear, parse_clipboard,
+                           parse_command, parse_cursor, parse_undo)
 from live_segmenter import ChunkReady, LongPause
 
 _STOP = object()
@@ -154,6 +154,10 @@ class LiveController:
         if parse_clear(text):
             self._run_clear(raw)
             return
+        action = parse_clipboard(text)
+        if action is not None:
+            self._run_clipboard(action, raw)
+            return
         if parse_undo(text):
             self._verify_history()
             edit = self.session.undo()
@@ -246,6 +250,18 @@ class LiveController:
         self.log(f"[live] clear line raw={raw!r} ({'ok' if ok else 'not cleared'})")
         if ok:
             self.session.set_context("", "")
+
+    def _run_clipboard(self, action, raw):
+        """Paste / copy / cut with the window's keys. Paste and cut change the
+        line with text this session did not type: nothing before them may be
+        rewritten after them."""
+        self.session.commit()
+        if action != "copy":
+            self.session.forget_history()
+            self.session.after_text = ""
+        press = getattr(self.target, "clipboard", None)
+        ok = press(action) if press is not None else False
+        self.log(f"[live] {action} raw={raw!r} ({'ok' if ok else 'not done here'})")
 
     def _run_move(self, move, raw):
         """A spoken cursor move: nothing typed before it may be rewritten after

@@ -41,11 +41,11 @@ from asr_models import (
 )
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
-from live_commands import parse_auto_punctuation, parse_clear, parse_cursor, parse_undo, split_enter
+from live_commands import parse_auto_punctuation, parse_clear, parse_clipboard, parse_cursor, parse_undo, split_enter
 from text_fixes import (DEFAULT_SHELL_ALIASES, DEFAULT_SHELL_COMMANDS, DEFAULT_SLASH_COMMANDS, fix_shell_command,
                         fix_slash_command, fix_ticket_keys, manual_punctuation)
 from live_controller import LiveController, select_transcribers
-from live_output import WezTermTarget, XdotoolTarget, choose_target
+from live_output import WezTermTarget, XdotoolTarget, choose_target, clipboard_key, is_terminal, press_key
 from live_segmenter import LiveSegmenter
 from live_session import Edit, LiveSession, is_slash_command, normalise
 
@@ -80,7 +80,7 @@ ICON_DIR = Path(__file__).parent / "icons"
 COMMAND_VOCABULARY = [
     "slash", "command", "command undo", "undo that", "command clear", "scratch that",
     "press enter", "engage", "cursor back", "cursor forward", "period", "comma",
-    "question mark", "auto punctuation",
+    "question mark", "auto punctuation", "command paste", "command copy", "command cut",
 ]
 
 DEFAULT_CONFIG = {
@@ -970,6 +970,10 @@ class WhisperDictate:
         if parse_clear(text):
             GLib.idle_add(lambda: self._oneshot_clear(line_source))
             return
+        action = parse_clipboard(text)
+        if action is not None:
+            GLib.idle_add(lambda: self._oneshot_clipboard(line_source, action))
+            return
         if parse_undo(text):
             GLib.idle_add(lambda: self._oneshot_undo_last(line_source))
             return
@@ -1502,6 +1506,18 @@ class WhisperDictate:
                 ok = subprocess.run(["xdotool", "key", "--clearmodifiers", "Return"],
                                     check=False).returncode == 0
             print(f"[whisper-dictate] one-shot: Enter pressed ({'ok' if ok else 'failed'})")
+        self.update_status("Ready")
+        return False
+
+    def _oneshot_clipboard(self, line_source, action):
+        """"command paste / copy / cut": the focused window's clipboard keys."""
+        press = getattr(line_source, "clipboard", None)
+        if press is not None:
+            ok = press(action)
+        else:
+            key = clipboard_key(action, is_terminal(self.get_focused_window_class()))
+            ok = bool(key) and press_key(key)
+        print(f"[whisper-dictate] one-shot: {action} ({'ok' if ok else 'not done here'})")
         self.update_status("Ready")
         return False
 

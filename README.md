@@ -78,6 +78,12 @@ Typical use: a word came out wrong, say "undo that" and repeat it. Live mode, an
 achat prompts (the line must still end with exactly that text). Enter and cursor moves are
 not undone.
 
+Clipboard, said as a whole utterance: "command paste", "command copy", "command cut" press
+Ctrl+V / Ctrl+C / Ctrl+X in the focused window. In terminals (WezTerm, GNOME Terminal,
+kitty, ...) that is Ctrl+Shift+V / Ctrl+Shift+C instead, since Ctrl+C would interrupt the
+program; cut does nothing there. After a paste or cut, live dictation does not rewrite
+anything typed before it.
+
 Jira keys: list your project keys in `ticket_keys` (e.g. `["VDX"]`) and spoken keys are
 written properly: "v D X dash two eight three", "VDX two eighty three" and the misheard
 "v D X dash two A three" all become `VDX-283`. Only text after one of your keys is touched.

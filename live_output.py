@@ -45,6 +45,33 @@ def xdotool_active_window(run=subprocess.run):
     return (res.stdout or "").strip() or None
 
 
+_TERMINALS = ("wezterm", "terminal", "konsole", "kitty", "alacritty", "xterm", "terminator",
+              "tilix", "urxvt", "foot", "ghostty")
+
+
+def is_terminal(wm_class):
+    return any(t in (wm_class or "").lower() for t in _TERMINALS)
+
+
+def clipboard_key(action, terminal):
+    """The key for "paste" / "copy" / "cut", or None where there is none.
+
+    Terminals: Ctrl+Shift+V / C (Ctrl+C would interrupt the program there),
+    and no cut: terminal text can only be selected, not cut."""
+    if terminal:
+        return {"paste": "ctrl+shift+v", "copy": "ctrl+shift+c"}.get(action)
+    return {"paste": "ctrl+v", "copy": "ctrl+c", "cut": "ctrl+x"}.get(action)
+
+
+def press_key(key, run=subprocess.run):
+    """Press a key chord in the focused window."""
+    try:
+        res = run(["xdotool", "key", "--clearmodifiers", key], capture_output=True, timeout=5)
+    except Exception:
+        return False
+    return res.returncode == 0
+
+
 _PROMPT_MARKS = ("$ ", "# ", "% ", "> ", "\u276f ", "\u276f\u00a0", "\u203a ", "\u203a\u00a0")
 
 
@@ -156,6 +183,11 @@ class WezTermTarget:
             return False
         return res.returncode == 0
 
+    def clipboard(self, action):
+        """Paste / copy with the terminal's own keys (cut: none)."""
+        key = clipboard_key(action, terminal=True)
+        return bool(key) and press_key(key, self._run)
+
     SCREEN_ROWS = 15  # the input box sits near the bottom of the pane
 
     @staticmethod
@@ -194,9 +226,14 @@ class XdotoolTarget:
 
     name = "xdotool"
 
-    def __init__(self, window_id, run=subprocess.run):
+    def __init__(self, window_id, run=subprocess.run, terminal=False):
         self.window_id = str(window_id)
         self._run = run
+        self.terminal = terminal  # a terminal other than WezTerm: its clipboard keys
+
+    def clipboard(self, action):
+        key = clipboard_key(action, self.terminal)
+        return bool(key) and press_key(key, self._run)
 
     @classmethod
     def detect(cls, run=subprocess.run):
@@ -263,4 +300,7 @@ def choose_target(wm_class, run=subprocess.run, achat_detect=None):
         target = WezTermTarget.detect(run)
         if target is not None:
             return target
-    return XdotoolTarget.detect(run)
+    target = XdotoolTarget.detect(run)
+    if target is not None:
+        target.terminal = is_terminal(wm_class)
+    return target
