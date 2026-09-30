@@ -86,6 +86,8 @@ COMMAND_VOCABULARY = [
     "question mark", "auto punctuation", "auto capitalization", "command paste", "command copy", "command cut",
 ]
 
+PLAYBACK_LEAD_S = 0.3
+
 DEFAULT_CONFIG = {
     "hotkey": "<Alt>d",
     "model": "base",
@@ -108,6 +110,8 @@ DEFAULT_CONFIG = {
     "live_max_chunk_s": 8,
     "live_window_max_s": 12,
     "live_commit_pause_ms": 1200,
+    # Audio kept from before speech is detected, so the first sound is not cut.
+    "live_preroll_ms": 300,
     "live_max_backspace": 80,
     "live_max_command_backspace": 300,
     # Jira project keys: spoken "v D X dash two eight three" becomes VDX-283.
@@ -1101,6 +1105,7 @@ class WhisperDictate:
             max_chunk_s=float(cfg.get("live_max_chunk_s", 8)),
             threshold=float(cfg.get("silence_threshold", 0.0)),
             long_pause_ms=int(cfg.get("live_commit_pause_ms", 1200)),
+            pad_ms=int(cfg.get("live_preroll_ms", 300)),
         )
         session = LiveSession(
             base_prompt=self.get_asr_context(),
@@ -2009,9 +2014,11 @@ class WhisperDictate:
             self.notify("Stop recording before playing back.")
             return
         print(f"[whisper-dictate] Playing recording from {recording.label()}")
+        # Silence first: an output waking from suspend drops its first ~0.2s.
+        lead = np.zeros(int(recording.sample_rate * PLAYBACK_LEAD_S), dtype=np.float32)
         try:
-            self._playback_until = time.monotonic() + recording.seconds + 0.3
-            sd.play(recording.audio, recording.sample_rate, blocking=False)
+            self._playback_until = time.monotonic() + PLAYBACK_LEAD_S + recording.seconds + 0.3
+            sd.play(np.concatenate([lead, recording.audio]), recording.sample_rate, blocking=False)
         except Exception as e:
             self._playback_until = 0.0
             self.notify(f"Playback failed: {e}")

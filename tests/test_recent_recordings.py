@@ -81,3 +81,18 @@ class LiveChunkTests(unittest.TestCase):
             self.assertTrue(a.playback_active())
             a.stop_playback()
             self.assertFalse(a.playback_active())
+
+
+class PlaybackLeadTests(unittest.TestCase):
+    def test_playback_starts_with_silence_then_the_whole_recording(self):
+        from unittest import mock
+        import whisper_dictate as wd
+        a = object.__new__(wd.WhisperDictate)
+        a.recording = False
+        r = RecentRecordings().add(np.ones(16000, dtype=np.float32), 16000)
+        with mock.patch.object(wd.sd, "play") as play:
+            a.play_recording(r)
+        played = play.call_args.args[0]
+        lead = int(16000 * wd.PLAYBACK_LEAD_S)
+        self.assertFalse(played[:lead].any())
+        self.assertEqual(played[lead:].tolist(), r.audio.tolist())
