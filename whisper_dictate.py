@@ -42,6 +42,7 @@ from asr_models import (
 )
 from asr_openrouter import openrouter_api_key, transcribe_openrouter
 from asr_qwen import load_qwen, transcribe_qwen
+from audio_rate import MODEL_RATE, resample
 from recent_recordings import RecentRecordings
 from live_achat import AchatTarget, type_into_line
 from live_commands import parse_auto_setting, parse_clear, parse_clipboard, parse_cursor, parse_undo, split_enter
@@ -87,6 +88,18 @@ COMMAND_VOCABULARY = [
 ]
 
 PLAYBACK_LEAD_S = 0.3
+# Per worker thread: the audio the last transcription call sent to its model.
+_sent_audio = threading.local()
+
+
+def note_sent(audio, sample_rate):
+    _sent_audio.value = (np.array(audio, dtype=np.float32, copy=True), int(sample_rate))
+
+
+def take_sent():
+    value = getattr(_sent_audio, "value", None)
+    _sent_audio.value = None
+    return value
 
 DEFAULT_CONFIG = {
     "hotkey": "<Alt>d",
@@ -94,7 +107,11 @@ DEFAULT_CONFIG = {
     "cpu_fallback_model": "base.en",
     "language": "en",
     "language_models": {},
-    "sample_rate": 16000,
+    # Recording rate (48 kHz = EasyEffects' own, no input resampling); playback
+    # uses it. Local models and the server get 16 kHz, hosted models
+    # api_sample_rate, converted from this.
+    "sample_rate": 48000,
+    "api_sample_rate": 24000,
     "silence_threshold": 0.01,
     "silence_gate_delay_ms": 500,
     "output_mode": "type",  # type, clipboard, or both
@@ -839,11 +856,13 @@ class WhisperDictate:
 
         host = remote_config.get("host", "127.0.0.1")
         port = int(remote_config.get("port", 9876))
+        audio = resample(audio, self.config.get("sample_rate", MODEL_RATE))
+        note_sent(audio, MODEL_RATE)
         audio_bytes = audio.astype(np.float32).tobytes()
         header = build_remote_header(
             language=self.config.get("language", "en"),
             model=model_name,
-            sample_rate=self.config.get("sample_rate", 16000),
+            sample_rate=MODEL_RATE,
             audio_size=len(audio_bytes),
             prompt=self.get_asr_context() if prompt is None else prompt,
         )
@@ -870,11 +889,14 @@ class WhisperDictate:
     def transcribe_openrouter(self, audio, model_name, prompt=None, timeout=60):
         """Transcribe audio with a hosted model over the OpenRouter API."""
         start_time = time.time()
+        api_rate = int(self.config.get("api_sample_rate", 24000))
+        audio = resample(audio, self.config.get("sample_rate", MODEL_RATE), api_rate)
+        note_sent(audio, api_rate)
         text = transcribe_openrouter(
             audio,
             model_name,
             openrouter_api_key(self.config),
-            sample_rate=self.config.get("sample_rate", 16000),
+            sample_rate=api_rate,
             language=self.config.get("language"),
             prompt=self.get_asr_context() if prompt is None else prompt,
             timeout=timeout,
@@ -889,6 +911,8 @@ class WhisperDictate:
             model_name = self.config.get("model", "base")
         if is_openrouter_model(model_name):
             return self.transcribe_openrouter(audio, model_name, prompt=prompt)
+        audio = resample(audio, self.config.get("sample_rate", MODEL_RATE))
+        note_sent(audio, MODEL_RATE)
         self.load_model(model_name=model_name)
         start_time = time.time()
         if prompt is None:
@@ -906,7 +930,7 @@ class WhisperDictate:
         elif backend == 'transformers':
             result = self.model({
                 "array": audio,
-                "sampling_rate": self.config["sample_rate"]
+                "sampling_rate": MODEL_RATE
             })
             text = result.get("text", "").strip()
         else:
@@ -925,11 +949,15 @@ class WhisperDictate:
     
     def transcribe_and_paste(self, audio, recording=None):
         """Transcribe audio and paste result."""
+        take_sent()
         try:
             self._transcribe_and_paste_impl(audio, recording)
         finally:
             self.oneshot_transcribing = False
+            sent = take_sent()
             if recording is not None:
+                if sent is not None:
+                    recording.sent(*sent)
                 recording.failed = recording.text is None
                 GLib.idle_add(self.refresh_recent_menu)
 
@@ -1174,6 +1202,7 @@ class WhisperDictate:
         """Wrap the fast transcriber so each chunk lands in Recent recordings."""
         def keep(audio, prompt):
             recording = self.recent_recordings.add(np.array(audio, copy=True), sample_rate, live=True)
+            take_sent()
             try:
                 recording.text = fast(audio, prompt) or ""
                 return recording.text
@@ -1181,6 +1210,9 @@ class WhisperDictate:
                 recording.failed = True
                 raise
             finally:
+                sent = take_sent()
+                if sent is not None:
+                    recording.sent(*sent)
                 GLib.idle_add(self.refresh_recent_menu)
         return keep
 

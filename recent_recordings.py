@@ -17,6 +17,11 @@ class Recording:
         self.text = None  # None while transcribing
         self.failed = False
 
+    def sent(self, audio, sample_rate):
+        """Keep what the model got instead, so playback is what it heard."""
+        self.audio = audio
+        self.sample_rate = sample_rate
+
     @property
     def seconds(self):
         return len(self.audio) / float(self.sample_rate)
@@ -35,7 +40,8 @@ class Recording:
                 text = text[: LABEL_TEXT_CHARS - 1].rstrip() + "…"
             text = f"“{text}”"
         mark = "⚡ " if self.live else ""
-        return f"{mark}{stamp}  {self.seconds:.1f}s  {text}"
+        rate = f"{self.sample_rate / 1000:g}k"
+        return f"{mark}{stamp}  {self.seconds:.1f}s  {rate}  {text}"
 
 
 class RecentRecordings:

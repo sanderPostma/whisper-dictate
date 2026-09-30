@@ -1,5 +1,6 @@
 openai-whisper
 numpy
+scipy
 sounddevice
 pystray
 pynput

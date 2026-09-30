@@ -96,3 +96,37 @@ class PlaybackLeadTests(unittest.TestCase):
         lead = int(16000 * wd.PLAYBACK_LEAD_S)
         self.assertFalse(played[:lead].any())
         self.assertEqual(played[lead:].tolist(), r.audio.tolist())
+
+
+class PlaybackIsWhatTheModelGotTests(unittest.TestCase):
+    def test_live_chunk_keeps_the_audio_sent_not_the_recording(self):
+        from unittest import mock
+        import whisper_dictate as wd
+        a = object.__new__(wd.WhisperDictate)
+        a.recent_recordings = RecentRecordings()
+        a.recent_menu = None
+        sent = np.full(24000, 0.5, dtype=np.float32)
+
+        def fast(audio, prompt):
+            wd.note_sent(sent, 24000)
+            return "hi"
+        with mock.patch.object(wd.GLib, "idle_add"):
+            a._keep_live_chunks(fast, 48000)(audio(1, rate=48000), "p")
+        r = a.recent_recordings.newest_first()[0]
+        self.assertEqual(r.sample_rate, 24000)
+        self.assertEqual(r.audio.tolist(), sent.tolist())
+        self.assertIn("24k", r.label())
+
+    def test_nothing_sent_keeps_the_recording(self):
+        from unittest import mock
+        import whisper_dictate as wd
+        a = object.__new__(wd.WhisperDictate)
+        a.recent_recordings = RecentRecordings()
+        a.recent_menu = None
+        wd.note_sent(np.zeros(5, dtype=np.float32), 16000)  # stale value from an earlier call
+
+        def fast(audio, prompt):
+            raise RuntimeError("down")
+        with mock.patch.object(wd.GLib, "idle_add"), self.assertRaises(RuntimeError):
+            a._keep_live_chunks(fast, 48000)(audio(1, rate=48000), "p")
+        self.assertEqual(a.recent_recordings.newest_first()[0].sample_rate, 48000)
