@@ -5,9 +5,25 @@ QWEN_MODELS = {
     "qwen3-asr-0.6b": "Qwen/Qwen3-ASR-0.6B-hf",
 }
 
+# Hosted models reached over the OpenRouter API; no local weights.
+OPENROUTER_MODELS = {
+    "gpt-transcribe": "openai/gpt-transcribe",
+}
+
 
 def is_qwen_model(model_name):
     return bool(model_name) and model_name in QWEN_MODELS
+
+
+def is_openrouter_model(model_name):
+    return bool(model_name) and model_name in OPENROUTER_MODELS
+
+
+def openrouter_model_id(model_name):
+    try:
+        return OPENROUTER_MODELS[model_name]
+    except KeyError:
+        raise ValueError(f"Unknown OpenRouter model: {model_name}") from None
 
 
 def is_distil_model(model_name):
@@ -15,13 +31,13 @@ def is_distil_model(model_name):
 
 
 def is_english_only_model(model_name):
-    if not model_name or is_qwen_model(model_name):
+    if not model_name or is_qwen_model(model_name) or is_openrouter_model(model_name):
         return False
     return model_name.endswith(".en") or is_distil_model(model_name)
 
 
 def multilingual_model(model_name):
-    if not model_name or is_qwen_model(model_name):
+    if not model_name or is_qwen_model(model_name) or is_openrouter_model(model_name):
         return model_name
     if model_name.endswith(".en"):
         return model_name[: -len(".en")]
@@ -38,8 +54,8 @@ def qwen_hf_id(model_name):
 
 
 def effective_remote_model(local_model, remote_model, language="en"):
-    """Prefer a locally selected Qwen model on the remote server."""
-    if is_qwen_model(local_model):
+    """Prefer a locally selected Qwen or OpenRouter model over the server's."""
+    if is_qwen_model(local_model) or is_openrouter_model(local_model):
         return local_model
     if language != "en":
         return multilingual_model(remote_model)

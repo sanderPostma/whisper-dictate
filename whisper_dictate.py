@@ -36,9 +36,11 @@ from asr_models import (
     effective_remote_model,
     is_distil_model,
     is_english_only_model,
+    is_openrouter_model,
     is_qwen_model,
     multilingual_model,
 )
+from asr_openrouter import openrouter_api_key, transcribe_openrouter
 from asr_qwen import load_qwen, transcribe_qwen
 from live_achat import AchatTarget, type_into_line
 from live_commands import parse_auto_setting, parse_clear, parse_clipboard, parse_cursor, parse_undo, split_enter
@@ -483,6 +485,9 @@ class WhisperDictate:
         if model_name is None:
             model_name = self.config.get("model", "base")
         
+        if is_openrouter_model(model_name):
+            return  # hosted: nothing to load
+
         # Check if we need to reload (model changed)
         current_model_name = getattr(self, '_loaded_model_name', None)
         if self.model is not None and current_model_name == model_name:
@@ -751,6 +756,8 @@ class WhisperDictate:
 
     def probe_remote_service(self, timeout=3):
         """Lightweight remote health check using protocol ping."""
+        if is_openrouter_model(self.get_remote_model()):
+            return bool(openrouter_api_key(self.config))
         remote_config = self.get_remote_config()
         host = remote_config.get("host", "127.0.0.1")
         port = int(remote_config.get("port", 9876))
@@ -813,6 +820,9 @@ class WhisperDictate:
 
     def transcribe_remote(self, audio, timeout=60, prompt=None):
         """Transcribe audio by sending it to a remote Whisper server."""
+        model_name = self.get_remote_model()
+        if is_openrouter_model(model_name):
+            return self.transcribe_openrouter(audio, model_name, prompt=prompt, timeout=timeout)
         remote_config = self.get_remote_config()
 
         host = remote_config.get("host", "127.0.0.1")
@@ -820,7 +830,7 @@ class WhisperDictate:
         audio_bytes = audio.astype(np.float32).tobytes()
         header = build_remote_header(
             language=self.config.get("language", "en"),
-            model=self.get_remote_model(),
+            model=model_name,
             sample_rate=self.config.get("sample_rate", 16000),
             audio_size=len(audio_bytes),
             prompt=self.get_asr_context() if prompt is None else prompt,
@@ -845,10 +855,28 @@ class WhisperDictate:
             print(f"[whisper-dictate] Remote transcription took {elapsed:.2f}s")
         return response.get("text", "").strip()
 
+    def transcribe_openrouter(self, audio, model_name, prompt=None, timeout=60):
+        """Transcribe audio with a hosted model over the OpenRouter API."""
+        start_time = time.time()
+        text = transcribe_openrouter(
+            audio,
+            model_name,
+            openrouter_api_key(self.config),
+            sample_rate=self.config.get("sample_rate", 16000),
+            language=self.config.get("language"),
+            prompt=self.get_asr_context() if prompt is None else prompt,
+            timeout=timeout,
+        )
+        print(f"[whisper-dictate] OpenRouter transcription took "
+              f"{time.time() - start_time:.2f}s ({model_name})")
+        return text
+
     def _transcribe_local(self, audio, model_name=None, prompt=None):
         """Transcribe audio using the local model."""
         if model_name is None:
             model_name = self.config.get("model", "base")
+        if is_openrouter_model(model_name):
+            return self.transcribe_openrouter(audio, model_name, prompt=prompt)
         self.load_model(model_name=model_name)
         start_time = time.time()
         if prompt is None:
@@ -1814,6 +1842,8 @@ class WhisperDictate:
             "distil-large-v3",
             "---",
             "qwen3-asr-1.7b",
+            "---",
+            "gpt-transcribe",
         ]
         group = None
         self.model_items = {}
@@ -1954,6 +1984,9 @@ class WhisperDictate:
                     )
                 # Preload new model in background
                 self.preload_model()
+                if self.get_remote_config().get("enabled", False):
+                    # A hosted model does not depend on the server being up.
+                    threading.Thread(target=self.check_remote_service_once, daemon=True).start()
 
     def on_language_changed(self, item, lang_code):
         """Handle language selection change."""
@@ -2360,7 +2393,7 @@ def main():
     parser.add_argument(
         "--model",
         default=None,
-        help="ASR model (e.g. base, large, distil-large-v3, qwen3-asr-1.7b)"
+        help="ASR model (e.g. base, large, distil-large-v3, qwen3-asr-1.7b, gpt-transcribe)"
     )
     parser.add_argument(
         "--language", "-l",

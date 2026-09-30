@@ -58,7 +58,7 @@ Or with options:
 - **Record/Stop** - Toggle recording
 - **Mode: Type** - Check to type into active window
 - **Mode: Clipboard** - Check to copy to clipboard
-- **Model** - Whisper, distil-whisper, or Qwen3-ASR 1.7B
+- **Model** - Whisper, distil-whisper, Qwen3-ASR 1.7B, or hosted `gpt-transcribe` (OpenRouter)
 - **Settings** - Open config file
 
 Pressing Enter by voice works in one-shot and live mode: end with "press enter" (or
@@ -210,7 +210,7 @@ Edit `~/.config/whisper-dictate/config.json`:
 | Setting | Description | Options |
 |---------|-------------|---------|
 | `hotkey` | Global hotkey | `<Ctrl>`, `<Shift>`, `<Alt>`, `<Super>` + key |
-| `model` | ASR model | Whisper sizes, `distil-*`, or `qwen3-asr-1.7b` |
+| `model` | ASR model | Whisper sizes, `distil-*`, `qwen3-asr-1.7b`, or `gpt-transcribe` |
 | `language` | Language code | `en`, `nl`, `de`, etc. |
 | `language_models` | Last selected model per language | JSON object keyed by language code |
 | `output_mode` | How to output text | `type`, `clipboard`, `both` |
@@ -218,6 +218,8 @@ Edit `~/.config/whisper-dictate/config.json`:
 | `context_prompt` | Extra terms always appended to the pack | free text |
 
 Qwen3-ASR (`qwen3-asr-1.7b`) needs `transformers>=5.13` and about 6–10 GB VRAM on GPU (CPU works, but is slow). First load downloads `Qwen/Qwen3-ASR-1.7B-hf` (~4.5 GB). Select it from the tray **Model** menu; if remote mode is on, that Qwen id is sent to the GPU server.
+
+`gpt-transcribe` is OpenAI's hosted model (`openai/gpt-transcribe`), called over the OpenRouter API. The key comes from `$OPENROUTER_API_KEY`, else `openrouter_api_key` in `config.json`. It bypasses the remote server even when remote mode is on; if the call fails, the local fallback model takes over as with a down server. The vocabulary/context prompt and language are sent along. Usage is billed per second of audio (the cost of each call is logged).
 
 ASR context is set in config files (no tray control for now):
 
@@ -265,6 +267,7 @@ See `replacements.example.yml` for a full example.
 | medium | ~15-20s | Excellent | ~5GB |
 | large | ~30s+ | Best | ~10GB |
 | qwen3-asr-1.7b | GPU: fast / CPU: slow | Strong, promptable | ~6–10GB VRAM |
+| gpt-transcribe | ~0.5–1s round trip | Strong, promptable | none (hosted, paid) |
 
 ## Autostart
 
