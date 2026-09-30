@@ -59,7 +59,7 @@ Or with options:
 - **Mode: Type** - Check to type into active window
 - **Mode: Clipboard** - Check to copy to clipboard
 - **Model** - Whisper, distil-whisper, Qwen3-ASR 1.7B, or hosted `gpt-transcribe` (OpenRouter)
-- **Recent recordings** - Play back the last five one-shot recordings (time, length, transcript); older ones are dropped, nothing is saved to disk. Count: `recent_recordings_keep`
+- **Recent recordings** - Play back the last five recordings sent for transcription: one-shot recordings, and in live mode each chunk (marked ⚡), with time, length and transcript. Older ones are dropped, nothing is saved to disk (count: `recent_recordings_keep`). Playing one during live dictation mutes the mic until it ends, so the playback is not dictated
 - **Settings** - Open config file
 
 Pressing Enter by voice works in one-shot and live mode: end with "press enter" (or

@@ -1110,6 +1110,7 @@ class WhisperDictate:
             window_max_s=float(cfg.get("live_window_max_s", 12)),
         )
         fast, correct = self._live_transcribers()
+        fast = self._keep_live_chunks(fast, sample_rate)
         if not cfg.get("live_corrections", True):
             correct = None
         controller = LiveController(
@@ -1131,7 +1132,11 @@ class WhisperDictate:
         self._live_stream_started = False
 
         def audio_callback(indata, frames, time_info, status):
-            for event in segmenter.feed(indata[:, 0]):
+            audio = indata[:, 0]
+            if self.playback_active():
+                # The mic would hear the playback and dictate it: feed silence.
+                audio = np.zeros_like(audio)
+            for event in segmenter.feed(audio):
                 controller.submit(event)
 
         self.live_segmenter = segmenter
@@ -1159,6 +1164,20 @@ class WhisperDictate:
         self.update_status(f"⚡ Live → {target.name}{suffix}")
         print(f"[whisper-dictate] Live dictation started: {target.name}, corrections={correct is not None}")
         GLib.timeout_add(50, lambda: self.restore_focus(getattr(self, 'saved_window', None)) or False)
+
+    def _keep_live_chunks(self, fast, sample_rate):
+        """Wrap the fast transcriber so each chunk lands in Recent recordings."""
+        def keep(audio, prompt):
+            recording = self.recent_recordings.add(np.array(audio, copy=True), sample_rate, live=True)
+            try:
+                recording.text = fast(audio, prompt) or ""
+                return recording.text
+            except Exception:
+                recording.failed = True
+                raise
+            finally:
+                GLib.idle_add(self.refresh_recent_menu)
+        return keep
 
     def stop_live(self):
         if not getattr(self, "live_active", False):
@@ -1976,21 +1995,33 @@ class WhisperDictate:
         if recordings:
             menu.append(Gtk.SeparatorMenuItem())
             stop = Gtk.MenuItem(label="Stop playback")
-            stop.connect("activate", lambda _item: sd.stop())
+            stop.connect("activate", lambda _item: self.stop_playback())
             menu.append(stop)
         menu.show_all()
         return False
 
     def play_recording(self, recording):
-        """Play a recent recording (stops any playback already running)."""
-        if self.recording or getattr(self, "live_active", False):
+        """Play a recent recording (stops any playback already running).
+
+        During live dictation the mic is muted for as long as it plays.
+        """
+        if self.recording:
             self.notify("Stop recording before playing back.")
             return
         print(f"[whisper-dictate] Playing recording from {recording.label()}")
         try:
+            self._playback_until = time.monotonic() + recording.seconds + 0.3
             sd.play(recording.audio, recording.sample_rate, blocking=False)
         except Exception as e:
+            self._playback_until = 0.0
             self.notify(f"Playback failed: {e}")
+
+    def playback_active(self):
+        return time.monotonic() < getattr(self, "_playback_until", 0.0)
+
+    def stop_playback(self):
+        self._playback_until = 0.0
+        sd.stop()
 
     def update_mode(self):
         """Update output mode based on checkbox states."""

@@ -9,8 +9,9 @@ LABEL_TEXT_CHARS = 40
 
 
 class Recording:
-    def __init__(self, audio, sample_rate, when):
+    def __init__(self, audio, sample_rate, when, live=False):
         self.audio = audio
+        self.live = live  # a live-dictation chunk rather than a one-shot recording
         self.sample_rate = sample_rate
         self.when = when
         self.text = None  # None while transcribing
@@ -33,7 +34,8 @@ class Recording:
             if len(text) > LABEL_TEXT_CHARS:
                 text = text[: LABEL_TEXT_CHARS - 1].rstrip() + "…"
             text = f"“{text}”"
-        return f"{stamp}  {self.seconds:.1f}s  {text}"
+        mark = "⚡ " if self.live else ""
+        return f"{mark}{stamp}  {self.seconds:.1f}s  {text}"
 
 
 class RecentRecordings:
@@ -41,8 +43,8 @@ class RecentRecordings:
         self._items = deque(maxlen=max(1, int(keep)))
         self._lock = threading.Lock()
 
-    def add(self, audio, sample_rate, when=None):
-        recording = Recording(audio, sample_rate, time.time() if when is None else when)
+    def add(self, audio, sample_rate, when=None, live=False):
+        recording = Recording(audio, sample_rate, time.time() if when is None else when, live=live)
         with self._lock:
             self._items.append(recording)
         return recording

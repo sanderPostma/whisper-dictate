@@ -39,3 +39,45 @@ class RecentRecordingsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LiveChunkTests(unittest.TestCase):
+    def app(self):
+        from unittest import mock
+        import whisper_dictate as wd
+        a = object.__new__(wd.WhisperDictate)
+        a.recent_recordings = RecentRecordings()
+        a.recent_menu = None
+        self.idle = mock.patch.object(wd.GLib, "idle_add").start()
+        self.addCleanup(mock.patch.stopall)
+        return a
+
+    def test_live_chunks_are_kept_with_their_transcript(self):
+        a = self.app()
+        fast = a._keep_live_chunks(lambda audio, prompt: "hello there", 16000)
+        self.assertEqual(fast(audio(1.5), "p"), "hello there")
+        r = a.recent_recordings.newest_first()[0]
+        self.assertTrue(r.live)
+        self.assertEqual(r.text, "hello there")
+        self.assertTrue(r.label().startswith("⚡ "))
+
+    def test_failed_live_chunk_is_kept_and_error_still_raised(self):
+        a = self.app()
+
+        def boom(audio, prompt):
+            raise RuntimeError("down")
+        with self.assertRaises(RuntimeError):
+            a._keep_live_chunks(boom, 16000)(audio(1), "p")
+        self.assertTrue(a.recent_recordings.newest_first()[0].failed)
+
+    def test_playback_window_mutes_then_ends(self):
+        from unittest import mock
+        import whisper_dictate as wd
+        a = self.app()
+        a.recording = False
+        r = a.recent_recordings.add(audio(2), 16000)
+        with mock.patch.object(wd.sd, "play"), mock.patch.object(wd.sd, "stop"):
+            a.play_recording(r)
+            self.assertTrue(a.playback_active())
+            a.stop_playback()
+            self.assertFalse(a.playback_active())
