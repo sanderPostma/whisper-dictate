@@ -87,7 +87,7 @@ COMMAND_VOCABULARY = [
     "question mark", "auto punctuation", "auto capitalization", "command paste", "command copy", "command cut",
 ]
 
-PLAYBACK_LEAD_S = 0.3
+PLAYBACK_LEAD_S = 0.8  # default for config "playback_lead_ms"
 # Per worker thread: the audio the last transcription call sent to its model.
 _sent_audio = threading.local()
 
@@ -2046,11 +2046,16 @@ class WhisperDictate:
             self.notify("Stop recording before playing back.")
             return
         print(f"[whisper-dictate] Playing recording from {recording.label()}")
-        # Silence first: an output waking from suspend drops its first ~0.2s.
-        lead = np.zeros(int(recording.sample_rate * PLAYBACK_LEAD_S), dtype=np.float32)
+        # Silence first: an output waking from suspend (PipeWire, codec power
+        # save) cuts or distorts the first part of what it plays.
+        lead_s = self.config.get("playback_lead_ms", PLAYBACK_LEAD_S * 1000) / 1000
+        lead = np.zeros(int(recording.sample_rate * lead_s), dtype=np.float32)
         try:
-            self._playback_until = time.monotonic() + PLAYBACK_LEAD_S + recording.seconds + 0.3
-            sd.play(np.concatenate([lead, recording.audio]), recording.sample_rate, blocking=False)
+            self._playback_until = time.monotonic() + lead_s + recording.seconds + 0.3
+            # A large buffer: under heavy CPU load the default low latency
+            # underruns, and the playback crackles where the recording is clean.
+            sd.play(np.concatenate([lead, recording.audio]), recording.sample_rate,
+                    blocking=False, latency="high")
         except Exception as e:
             self._playback_until = 0.0
             self.notify(f"Playback failed: {e}")

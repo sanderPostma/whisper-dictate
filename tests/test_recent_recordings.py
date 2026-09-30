@@ -75,6 +75,7 @@ class LiveChunkTests(unittest.TestCase):
         import whisper_dictate as wd
         a = self.app()
         a.recording = False
+        a.config = {}
         r = a.recent_recordings.add(audio(2), 16000)
         with mock.patch.object(wd.sd, "play"), mock.patch.object(wd.sd, "stop"):
             a.play_recording(r)
@@ -89,6 +90,7 @@ class PlaybackLeadTests(unittest.TestCase):
         import whisper_dictate as wd
         a = object.__new__(wd.WhisperDictate)
         a.recording = False
+        a.config = {}
         r = RecentRecordings().add(np.ones(16000, dtype=np.float32), 16000)
         with mock.patch.object(wd.sd, "play") as play:
             a.play_recording(r)
