@@ -42,6 +42,7 @@ from asr_models import (
 )
 from asr_openrouter import openrouter_api_key, transcribe_openrouter
 from asr_qwen import load_qwen, transcribe_qwen
+from recent_recordings import RecentRecordings
 from live_achat import AchatTarget, type_into_line
 from live_commands import parse_auto_setting, parse_clear, parse_clipboard, parse_cursor, parse_undo, split_enter
 from text_fixes import (DEFAULT_SHELL_ALIASES, DEFAULT_SHELL_COMMANDS, DEFAULT_SLASH_COMMANDS, fix_shell_command,
@@ -128,6 +129,8 @@ DEFAULT_CONFIG = {
     # Extra words the model should prefer (names, jargon), sent with every
     # transcription next to the spoken command words.
     "vocabulary": [],
+    # How many one-shot recordings the tray's "Recent recordings" can play back.
+    "recent_recordings_keep": 5,
     "live_corrections": True,
     "live_committed_context_chars": 400,
     "remote_server": {
@@ -175,6 +178,8 @@ class WhisperDictate:
         self.remote_state_lock = threading.Lock()
         self.remote_monitor_stop = threading.Event()
         self.remote_monitor_thread = None
+        self.recent_recordings = RecentRecordings(self.config.get("recent_recordings_keep", 5))
+        self.recent_menu = None
         self.create_icons()
         model_changes = self.normalize_models_for_language()
         preferences_changed = self.remember_model_for_language()
@@ -699,9 +704,12 @@ class WhisperDictate:
         # Concatenate audio
         audio = np.concatenate(self.audio_data, axis=0).flatten()
         
+        recording = self.recent_recordings.add(audio, self.config["sample_rate"])
+        self.refresh_recent_menu()
+
         # Transcribe in background
         self.oneshot_transcribing = True
-        threading.Thread(target=self.transcribe_and_paste, args=(audio,), daemon=True).start()
+        threading.Thread(target=self.transcribe_and_paste, args=(audio, recording), daemon=True).start()
 
     def _recv_exact(self, sock, size):
         """Receive exactly size bytes from a socket."""
@@ -911,12 +919,15 @@ class WhisperDictate:
         print(f"[whisper-dictate] Local transcription took {elapsed:.2f}s ({model_name})")
         return text
     
-    def transcribe_and_paste(self, audio):
+    def transcribe_and_paste(self, audio, recording=None):
         """Transcribe audio and paste result."""
         try:
-            self._transcribe_and_paste_impl(audio)
+            self._transcribe_and_paste_impl(audio, recording)
         finally:
             self.oneshot_transcribing = False
+            if recording is not None:
+                recording.failed = recording.text is None
+                GLib.idle_add(self.refresh_recent_menu)
 
     def _oneshot_line_source(self):
         """What can tell us the text around the cursor in the focused window.
@@ -949,7 +960,7 @@ class WhisperDictate:
         tail = context[0][-int(self.config.get("live_committed_context_chars", 400)):]
         return "\n".join(p for p in ((base or "").strip(), tail.strip()) if p)
 
-    def _transcribe_and_paste_impl(self, audio):
+    def _transcribe_and_paste_impl(self, audio, recording=None):
         GLib.idle_add(lambda: self.update_status("Transcribing..."))
         line_source = self._oneshot_line_source()
         prompt = self._oneshot_prompt(line_source)
@@ -989,6 +1000,8 @@ class WhisperDictate:
             print(f"[whisper-dictate] Transcription failed: {e}")
             GLib.idle_add(lambda: self.update_status("Ready"))
             return
+        if recording is not None:
+            recording.text = text or ""
         
         if not text:
             GLib.idle_add(lambda: self.update_status("Ready"))
@@ -1915,6 +1928,13 @@ class WhisperDictate:
         menu.append(auto_capitalization_item)
         self.auto_capitalization_item = auto_capitalization_item
         
+        # Play back the last few one-shot recordings
+        recent_item = Gtk.MenuItem(label="Recent recordings")
+        self.recent_menu = Gtk.Menu()
+        recent_item.set_submenu(self.recent_menu)
+        menu.append(recent_item)
+        self.refresh_recent_menu()
+
         # Transcribe file
         transcribe_file_item = Gtk.MenuItem(label="Transcribe File...")
         transcribe_file_item.connect("activate", self.show_transcribe_file_dialog)
@@ -1937,6 +1957,41 @@ class WhisperDictate:
         menu.show_all()
         return menu
     
+    def refresh_recent_menu(self):
+        """Rebuild the "Recent recordings" submenu, newest first."""
+        menu = getattr(self, "recent_menu", None)
+        if menu is None:
+            return False
+        for child in menu.get_children():
+            menu.remove(child)
+        recordings = self.recent_recordings.newest_first()
+        if not recordings:
+            empty = Gtk.MenuItem(label="(none yet)")
+            empty.set_sensitive(False)
+            menu.append(empty)
+        for recording in recordings:
+            item = Gtk.MenuItem(label="▶ " + recording.label())
+            item.connect("activate", lambda _item, r=recording: self.play_recording(r))
+            menu.append(item)
+        if recordings:
+            menu.append(Gtk.SeparatorMenuItem())
+            stop = Gtk.MenuItem(label="Stop playback")
+            stop.connect("activate", lambda _item: sd.stop())
+            menu.append(stop)
+        menu.show_all()
+        return False
+
+    def play_recording(self, recording):
+        """Play a recent recording (stops any playback already running)."""
+        if self.recording or getattr(self, "live_active", False):
+            self.notify("Stop recording before playing back.")
+            return
+        print(f"[whisper-dictate] Playing recording from {recording.label()}")
+        try:
+            sd.play(recording.audio, recording.sample_rate, blocking=False)
+        except Exception as e:
+            self.notify(f"Playback failed: {e}")
+
     def update_mode(self):
         """Update output mode based on checkbox states."""
         type_on = self.mode_type_item.get_active()

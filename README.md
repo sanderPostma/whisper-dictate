@@ -59,6 +59,7 @@ Or with options:
 - **Mode: Type** - Check to type into active window
 - **Mode: Clipboard** - Check to copy to clipboard
 - **Model** - Whisper, distil-whisper, Qwen3-ASR 1.7B, or hosted `gpt-transcribe` (OpenRouter)
+- **Recent recordings** - Play back the last five one-shot recordings (time, length, transcript); older ones are dropped, nothing is saved to disk. Count: `recent_recordings_keep`
 - **Settings** - Open config file
 
 Pressing Enter by voice works in one-shot and live mode: end with "press enter" (or
