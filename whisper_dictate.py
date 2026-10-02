@@ -1237,6 +1237,9 @@ class WhisperDictate:
             self.update_icon(False)
             self.update_status("Ready")
             print("[whisper-dictate] Live dictation stopped")
+        else:
+            # Mic never opened: nothing else refreshes the menu mark.
+            self.refresh_action_marks()
         return False
 
     def get_focused_window_class(self):
@@ -1372,7 +1375,7 @@ class WhisperDictate:
             self.transcribe_finished_event.set()
         threading.Thread(target=chunker, daemon=True).start()
 
-        self.transcribe_session_item.set_label("🛑 Stop Transcribe")
+        self.refresh_action_marks()
         GLib.idle_add(lambda: self.update_status("Transcribing (mic + speakers)..."))
         GLib.idle_add(lambda: self.update_icon(True) or False)
         self.beep_start()
@@ -1468,7 +1471,7 @@ class WhisperDictate:
             pass
 
         self.beep_stop()
-        self.transcribe_session_item.set_label("🎙️ Transcribe...")
+        self.refresh_action_marks()
         GLib.idle_add(lambda: self.update_icon(False) or False)
         GLib.idle_add(lambda: self.update_status("Finalizing transcript..."))
 
@@ -1818,16 +1821,15 @@ class WhisperDictate:
         if recording and steady:
             self._stop_blinking()
             self._set_icon("mic-recording")
-            return
-        if recording:
-            if getattr(self, "_blink_timer_id", None):
-                return
-            self._blink_state = False
-            self._blink_tick()
-            self._blink_timer_id = GLib.timeout_add(500, self._blink_tick)
+        elif recording:
+            if not getattr(self, "_blink_timer_id", None):
+                self._blink_state = False
+                self._blink_tick()
+                self._blink_timer_id = GLib.timeout_add(500, self._blink_tick)
         else:
             self._stop_blinking()
             self._set_icon("mic-idle")
+        self.refresh_action_marks()
 
     def _stop_blinking(self):
         if getattr(self, "_blink_timer_id", None):
@@ -1841,6 +1843,41 @@ class WhisperDictate:
         """Update status in menu."""
         if self.status_item:
             self.status_item.set_label(f"Status: {status}")
+        self.refresh_action_marks()
+
+    def action_menu_labels(self):
+        """Labels for the first three actions. The hot one is prefixed with 'v '.
+
+        The tray icon is easy to miss and often stays on the last colour the
+        panel painted, so the menu itself has to show which mode is on.
+        Live stays marked while it is still finishing (live_busy): that is
+        the stretch where the icon is red and the session is no longer active.
+        """
+        if self.recording:
+            hot = "record"
+        elif getattr(self, "transcribe_active", False):
+            hot = "transcribe"
+        elif getattr(self, "live_active", False) or getattr(self, "live_busy", False):
+            hot = "live"
+        else:
+            hot = None
+        labels = {
+            "record": "🎤 Record/Stop",
+            "transcribe": "🛑 Stop Transcribe" if hot == "transcribe" else "🎙️ Transcribe...",
+            "live": "⚡ Live dictation",
+        }
+        return {key: ("v " + text if key == hot else text) for key, text in labels.items()}
+
+    def refresh_action_marks(self):
+        """Apply action_menu_labels to the tray items, when the menu exists."""
+        items = getattr(self, "action_menu_items", None)
+        if not items:
+            return False
+        for key, label in self.action_menu_labels().items():
+            item = items.get(key)
+            if item is not None and item.get_label() != label:
+                item.set_label(label)
+        return False
     
     def create_menu(self):
         """Create indicator menu."""
@@ -1861,6 +1898,11 @@ class WhisperDictate:
         live_item = Gtk.MenuItem(label="⚡ Live dictation")
         live_item.connect("activate", self.toggle_live)
         menu.append(live_item)
+        self.action_menu_items = {
+            "record": record_item,
+            "transcribe": transcribe_session_item,
+            "live": live_item,
+        }
 
         menu.append(Gtk.SeparatorMenuItem())
         

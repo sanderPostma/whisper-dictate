@@ -38,5 +38,43 @@ class TrayIconTests(unittest.TestCase):
         self.assertEqual(a.icons[-1], "mic-recording")
 
 
+class ActionMarkTests(unittest.TestCase):
+    """A 'v' on the hot action, because the tray icon often stays stale."""
+
+    def labels(self, **flags):
+        a = object.__new__(WhisperDictate)
+        a.recording = flags.get("recording", False)
+        a.transcribe_active = flags.get("transcribe_active", False)
+        a.live_active = flags.get("live_active", False)
+        a.live_busy = flags.get("live_busy", False)
+        return a.action_menu_labels()
+
+    def test_idle_has_no_mark(self):
+        labels = self.labels()
+        self.assertEqual(labels["record"], "🎤 Record/Stop")
+        self.assertEqual(labels["transcribe"], "🎙️ Transcribe...")
+        self.assertEqual(labels["live"], "⚡ Live dictation")
+        self.assertFalse(any(text.startswith("v ") for text in labels.values()))
+
+    def test_recording_marks_record(self):
+        labels = self.labels(recording=True)
+        self.assertEqual(labels["record"], "v 🎤 Record/Stop")
+        self.assertFalse(labels["live"].startswith("v "))
+        self.assertFalse(labels["transcribe"].startswith("v "))
+
+    def test_live_and_finishing_mark_live(self):
+        self.assertEqual(self.labels(live_active=True)["live"], "v ⚡ Live dictation")
+        # Icon stays red until the controller finishes; the mark stays with it.
+        labels = self.labels(live_busy=True)
+        self.assertEqual(labels["live"], "v ⚡ Live dictation")
+        self.assertFalse(labels["record"].startswith("v "))
+
+    def test_transcribe_session_marks_its_stop_label(self):
+        labels = self.labels(transcribe_active=True)
+        self.assertEqual(labels["transcribe"], "v 🛑 Stop Transcribe")
+        self.assertFalse(labels["record"].startswith("v "))
+        self.assertFalse(labels["live"].startswith("v "))
+
+
 if __name__ == "__main__":
     unittest.main()
