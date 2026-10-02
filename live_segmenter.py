@@ -5,6 +5,84 @@ from dataclasses import dataclass
 import numpy as np
 
 DEFAULT_THRESHOLD = 0.01
+# How much audio before the opening window to keep once the gate was closed.
+# A "t" is often quieter than the vowel and sits in the previous block.
+ATTACK_LOOKBACK_MS = 40
+
+
+def window_voiced(block, threshold, attack_samples):
+    """True when any attack-sized slice reaches the threshold.
+
+    Whole-block RMS hides a consonant that fills only the start or the end
+    of a 50 ms callback. The gate then opens on the vowel and the consonant
+    is already gone.
+    """
+    block = np.asarray(block, dtype=np.float32).reshape(-1)
+    if block.size == 0:
+        return False
+    if threshold <= 0:
+        return True
+    win = int(attack_samples) if attack_samples else block.size
+    if win <= 1 or win >= block.size:
+        return float(np.sqrt(np.mean(block * block))) >= threshold
+    n = block.size // win
+    slices = block[:n * win].reshape(n, win)
+    peak = float(np.max(np.mean(slices * slices, axis=1)))
+    if peak >= threshold * threshold:
+        return True
+    tail = block[n * win:]
+    if tail.size == 0:
+        return False
+    return float(np.mean(tail * tail)) >= threshold * threshold
+
+
+class SilenceGate:
+    """One-shot noise gate. Closes after delay_ms below threshold.
+
+    Opens on window_voiced, and prepends the last lookback of audio so the
+    consonant that did not itself cross the threshold is still recorded.
+    """
+
+    def __init__(self, sample_rate, threshold, delay_ms, attack_ms=10,
+                 lookback_ms=ATTACK_LOOKBACK_MS):
+        self.threshold = float(threshold)
+        self.delay_samples = max(0, int(sample_rate * delay_ms / 1000))
+        self.attack_samples = max(1, int(sample_rate * attack_ms / 1000))
+        self.lookback_samples = max(self.attack_samples, int(sample_rate * lookback_ms / 1000))
+        self._silence = 0
+        self._closed = False
+        self._tail = np.zeros(0, dtype=np.float32)
+
+    def _remember(self, block):
+        n = self.lookback_samples
+        if block.size >= n:
+            self._tail = block[-n:].copy()
+        elif self._tail.size == 0:
+            self._tail = block.copy()
+        else:
+            self._tail = np.concatenate([self._tail, block])[-n:]
+
+    def accept(self, block):
+        """Audio to keep, or None when this block falls inside a closed gate."""
+        block = np.asarray(block, dtype=np.float32).reshape(-1)
+        if block.size == 0:
+            return None
+        if self.threshold <= 0:
+            return block
+        if not window_voiced(block, self.threshold, self.attack_samples):
+            self._silence += block.size
+            self._remember(block)
+            if self._silence >= self.delay_samples:
+                self._closed = True
+                return None
+            return block
+        self._silence = 0
+        tail = self._tail if self._closed else None
+        self._closed = False
+        self._tail = np.zeros(0, dtype=np.float32)
+        if tail is not None and tail.size:
+            return np.concatenate([tail, block])
+        return block
 
 
 @dataclass
@@ -29,7 +107,7 @@ class LiveSegmenter:
     """
 
     def __init__(self, sample_rate, pause_ms=600, max_chunk_s=8.0, threshold=0.0,
-                 pad_ms=150, long_pause_ms=1200, min_speech_ms=200):
+                 pad_ms=150, long_pause_ms=1200, min_speech_ms=200, attack_ms=10):
         self.sample_rate = int(sample_rate)
         self.threshold = float(threshold) if threshold and threshold > 0 else DEFAULT_THRESHOLD
         self.pause_samples = int(self.sample_rate * pause_ms / 1000)
@@ -37,6 +115,7 @@ class LiveSegmenter:
         self.max_samples = int(self.sample_rate * max_chunk_s)
         self.pad_samples = int(self.sample_rate * pad_ms / 1000)
         self.min_speech_samples = int(self.sample_rate * min_speech_ms / 1000)
+        self.attack_samples = max(1, int(self.sample_rate * attack_ms / 1000))
         self._pos = 0
         self._pre = np.zeros(0, dtype=np.float32)
         self._buf = []
@@ -61,7 +140,7 @@ class LiveSegmenter:
         n = block.size
         if n == 0:
             return events
-        voiced = float(np.sqrt(np.mean(block ** 2))) >= self.threshold
+        voiced = window_voiced(block, self.threshold, self.attack_samples)
         start = self._pos
         self._pos += n
 

@@ -50,7 +50,7 @@ from text_fixes import (DEFAULT_SHELL_ALIASES, DEFAULT_SHELL_COMMANDS, DEFAULT_S
                         fix_slash_command, fix_ticket_keys, lower_case, manual_punctuation)
 from live_controller import LiveController, select_transcribers
 from live_output import WezTermTarget, XdotoolTarget, choose_target, clipboard_key, is_terminal, press_key
-from live_segmenter import LiveSegmenter
+from live_segmenter import LiveSegmenter, SilenceGate
 from live_session import Edit, LiveSession, is_slash_command, normalise
 
 # Optional: transformers for distil-whisper models
@@ -114,6 +114,9 @@ DEFAULT_CONFIG = {
     "api_sample_rate": 24000,
     "silence_threshold": 0.01,
     "silence_gate_delay_ms": 500,
+    # Open the gate on a 10 ms slice, not the whole callback block, so a
+    # leading consonant is not averaged under the threshold.
+    "silence_gate_attack_ms": 10,
     "output_mode": "type",  # type, clipboard, or both
     "context_pack": "none",  # none | developer | custom
     "context_prompt": "",
@@ -632,23 +635,18 @@ class WhisperDictate:
         self.audio_data = []
         self.update_icon(True)
         self.update_status("🔴 Recording...")
-        silence_run_samples = 0
-        gate_delay_ms = max(0, int(self.config.get("silence_gate_delay_ms", 500)))
-        gate_delay_samples = int(self.config["sample_rate"] * gate_delay_ms / 1000)
-        
+        gate = SilenceGate(
+            self.config["sample_rate"],
+            float(self.config.get("silence_threshold", 0.0)),
+            max(0, int(self.config.get("silence_gate_delay_ms", 500))),
+            attack_ms=max(1, int(self.config.get("silence_gate_attack_ms", 10))),
+        )
+
         def audio_callback(indata, frames, time_info, status):
-            nonlocal silence_run_samples
             if self.recording:
-                threshold = float(self.config.get("silence_threshold", 0.0))
-                if threshold > 0:
-                    rms = float(np.sqrt(np.mean(indata ** 2)))
-                    if rms < threshold:
-                        silence_run_samples += frames
-                        if silence_run_samples >= gate_delay_samples:
-                            return
-                    else:
-                        silence_run_samples = 0
-                self.audio_data.append(indata.copy())
+                kept = gate.accept(indata[:, 0])
+                if kept is not None:
+                    self.audio_data.append(kept.copy())
         
         self.stream = sd.InputStream(
             samplerate=self.config["sample_rate"],
@@ -1134,6 +1132,7 @@ class WhisperDictate:
             threshold=float(cfg.get("silence_threshold", 0.0)),
             long_pause_ms=int(cfg.get("live_commit_pause_ms", 1200)),
             pad_ms=int(cfg.get("live_preroll_ms", 300)),
+            attack_ms=max(1, int(cfg.get("silence_gate_attack_ms", 10))),
         )
         session = LiveSession(
             base_prompt=self.get_asr_context(),

@@ -6,7 +6,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from live_segmenter import ChunkReady, LiveSegmenter, LongPause
+from live_segmenter import ChunkReady, LiveSegmenter, LongPause, SilenceGate
 
 SR = 16000
 BLOCK = 800  # 50 ms
@@ -97,6 +97,31 @@ class LiveSegmenterTests(unittest.TestCase):
 
 
 class BufferReuseTests(unittest.TestCase):
+    def test_attack_window_opens_on_a_consonant_the_block_average_misses(self):
+        # 40 ms of silence plus 10 ms of tone: the 50 ms average is under the
+        # threshold, the 10 ms slice is over it. pad_ms=0 so only a real open
+        # keeps the burst.
+        seg = LiveSegmenter(SR, threshold=0.01, attack_ms=10, pad_ms=0,
+                            min_speech_ms=0, pause_ms=100)
+        burst = np.concatenate([silence(0.04), tone(0.01, amp=0.02)])
+        whole = float(np.sqrt(np.mean(burst ** 2)))
+        self.assertLess(whole, 0.01)
+        events = seg.feed(burst)
+        events += feed_all(seg, np.concatenate([tone(0.3), silence(0.2)]))
+        chunk = chunks_of(events)[0]
+        self.assertGreater(float(np.max(np.abs(chunk.audio[:burst.size]))), 0.01)
+
+    def test_closed_gate_keeps_a_quiet_consonant_before_the_vowel(self):
+        gate = SilenceGate(SR, threshold=0.01, delay_ms=50, attack_ms=10, lookback_ms=40)
+        self.assertIsNone(gate.accept(silence(0.1)))
+        consonant = tone(0.04, amp=0.004)  # under the threshold on its own, fills the lookback
+        self.assertIsNone(gate.accept(consonant))
+        vowel = tone(0.05, amp=0.2)
+        kept = gate.accept(vowel)
+        self.assertIsNotNone(kept)
+        self.assertGreater(kept.size, vowel.size)
+        np.testing.assert_allclose(kept[:consonant.size], consonant, atol=1e-7)
+
     def test_chunks_survive_the_caller_reusing_its_buffer(self):
         # sounddevice reuses the callback's buffer after the callback returns.
         seg = LiveSegmenter(16000, pause_ms=100, threshold=0.01, pad_ms=0, min_speech_ms=0)
