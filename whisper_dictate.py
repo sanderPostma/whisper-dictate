@@ -1913,6 +1913,7 @@ class WhisperDictate:
             "qwen3-asr-1.7b",
             "---",
             "gpt-transcribe",
+            "mai-transcribe-2",
         ]
         group = None
         self.model_items = {}
@@ -2523,7 +2524,7 @@ def main():
     parser.add_argument(
         "--model",
         default=None,
-        help="ASR model (e.g. base, large, distil-large-v3, qwen3-asr-1.7b, gpt-transcribe)"
+        help="ASR model (e.g. base, large, distil-large-v3, qwen3-asr-1.7b, gpt-transcribe, mai-transcribe-2)"
     )
     parser.add_argument(
         "--language", "-l",

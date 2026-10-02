@@ -5,15 +5,34 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from asr_models import (
+    OPENROUTER_MODELS,
     QWEN_MODELS,
     build_remote_header,
     effective_remote_model,
     is_distil_model,
     is_english_only_model,
+    is_openrouter_model,
     is_qwen_model,
     multilingual_model,
+    openrouter_model_id,
+    openrouter_provider_tag,
     qwen_hf_id,
 )
+
+
+class OpenRouterModelMappingTests(unittest.TestCase):
+    def test_openrouter_model_ids(self):
+        self.assertEqual(openrouter_model_id("gpt-transcribe"), "openai/gpt-transcribe")
+        self.assertEqual(openrouter_model_id("openai/gpt-transcribe"), "openai/gpt-transcribe")
+        self.assertEqual(openrouter_model_id("mai-transcribe-2"), "microsoft/mai-transcribe-2")
+        self.assertEqual(openrouter_model_id("microsoft/mai-transcribe-2"), "microsoft/mai-transcribe-2")
+        with self.assertRaises(ValueError):
+            openrouter_model_id("non-existent-model")
+
+    def test_openrouter_provider_tags(self):
+        self.assertEqual(openrouter_provider_tag("openai/gpt-transcribe"), "openai")
+        self.assertEqual(openrouter_provider_tag("microsoft/mai-transcribe-2"), "azure")
+        self.assertEqual(openrouter_provider_tag("custom/model"), "custom")
 
 
 class QwenModelMappingTests(unittest.TestCase):

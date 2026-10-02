@@ -10,7 +10,7 @@ import wave
 
 import numpy as np
 
-from asr_models import openrouter_model_id
+from asr_models import openrouter_model_id, openrouter_provider_tag
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/audio/transcriptions"
 API_KEY_ENV = "OPENROUTER_API_KEY"
@@ -44,9 +44,13 @@ def build_request_body(model_name, wav_bytes, language=None, prompt=None):
         body["language"] = language
     if prompt and str(prompt).strip():
         # The prompt is not normalized by OpenRouter; it goes to the provider
-        # under its own slug ("openai" for openai/gpt-transcribe).
-        provider = model_id.split("/", 1)[0]
-        body["provider"] = {"options": {provider: {"prompt": prompt}}}
+        # under its own slug ("openai" for openai/gpt-transcribe, "azure" for microsoft/mai-transcribe-2).
+        tag = openrouter_provider_tag(model_id)
+        prefix = model_id.split("/", 1)[0]
+        options = {tag: {"prompt": prompt}}
+        if prefix != tag:
+            options[prefix] = {"prompt": prompt}
+        body["provider"] = {"options": options}
     return body
 
 

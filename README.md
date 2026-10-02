@@ -58,7 +58,7 @@ Or with options:
 - **Record/Stop** - Toggle recording
 - **Mode: Type** - Check to type into active window
 - **Mode: Clipboard** - Check to copy to clipboard
-- **Model** - Whisper, distil-whisper, Qwen3-ASR 1.7B, or hosted `gpt-transcribe` (OpenRouter)
+- **Model** - Whisper, distil-whisper, Qwen3-ASR 1.7B, or hosted `gpt-transcribe` / `mai-transcribe-2` (OpenRouter)
 - **Recent recordings** - Play back the last five recordings sent for transcription: one-shot recordings, and in live mode each chunk (marked ⚡), with time, length and transcript. Older ones are dropped, nothing is saved to disk (count: `recent_recordings_keep`). Playing one during live dictation mutes the mic until it ends, so the playback is not dictated. Playback is exactly the audio the model got, at its rate (shown in the label)
 - **Settings** - Open config file
 
@@ -211,7 +211,7 @@ Edit `~/.config/whisper-dictate/config.json`:
 | Setting | Description | Options |
 |---------|-------------|---------|
 | `hotkey` | Global hotkey | `<Ctrl>`, `<Shift>`, `<Alt>`, `<Super>` + key |
-| `model` | ASR model | Whisper sizes, `distil-*`, `qwen3-asr-1.7b`, or `gpt-transcribe` |
+| `model` | ASR model | Whisper sizes, `distil-*`, `qwen3-asr-1.7b`, `gpt-transcribe`, or `mai-transcribe-2` |
 | `language` | Language code | `en`, `nl`, `de`, etc. |
 | `language_models` | Last selected model per language | JSON object keyed by language code |
 | `output_mode` | How to output text | `type`, `clipboard`, `both` |
@@ -220,7 +220,11 @@ Edit `~/.config/whisper-dictate/config.json`:
 
 Qwen3-ASR (`qwen3-asr-1.7b`) needs `transformers>=5.13` and about 6–10 GB VRAM on GPU (CPU works, but is slow). First load downloads `Qwen/Qwen3-ASR-1.7B-hf` (~4.5 GB). Select it from the tray **Model** menu; if remote mode is on, that Qwen id is sent to the GPU server.
 
-`gpt-transcribe` is OpenAI's hosted model (`openai/gpt-transcribe`), called over the OpenRouter API. The key comes from `$OPENROUTER_API_KEY`, else `openrouter_api_key` in `config.json`. It bypasses the remote server even when remote mode is on; if the call fails, the local fallback model takes over as with a down server. The vocabulary/context prompt and language are sent along. Usage is billed per second of audio (the cost of each call is logged).
+Hosted models called over the OpenRouter API:
+- `gpt-transcribe`: OpenAI's hosted model (`openai/gpt-transcribe`).
+- `mai-transcribe-2`: Microsoft AI's model (`microsoft/mai-transcribe-2`), Azure-backed, ranked #1 on the FLEURS multilingual benchmark across 60 languages.
+
+The API key comes from `$OPENROUTER_API_KEY`, else `openrouter_api_key` in `config.json`. Hosted models bypass the remote server even when remote mode is on; if the call fails, the local fallback model takes over as with a down server. The vocabulary/context prompt and language are sent along. Usage is billed per second of audio (the cost of each call is logged).
 
 ASR context is set in config files (no tray control for now):
 
@@ -269,6 +273,7 @@ See `replacements.example.yml` for a full example.
 | large | ~30s+ | Best | ~10GB |
 | qwen3-asr-1.7b | GPU: fast / CPU: slow | Strong, promptable | ~6–10GB VRAM |
 | gpt-transcribe | ~0.5–1s round trip | Strong, promptable | none (hosted, paid) |
+| mai-transcribe-2 | ~0.5–1s round trip | #1 FLEURS multilingual (60 langs), promptable | none (hosted, paid) |
 
 ## Autostart
 

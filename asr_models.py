@@ -8,6 +8,14 @@ QWEN_MODELS = {
 # Hosted models reached over the OpenRouter API; no local weights.
 OPENROUTER_MODELS = {
     "gpt-transcribe": "openai/gpt-transcribe",
+    "openai/gpt-transcribe": "openai/gpt-transcribe",
+    "mai-transcribe-2": "microsoft/mai-transcribe-2",
+    "microsoft/mai-transcribe-2": "microsoft/mai-transcribe-2",
+}
+
+OPENROUTER_PROVIDER_TAGS = {
+    "openai/gpt-transcribe": "openai",
+    "microsoft/mai-transcribe-2": "azure",
 }
 
 
@@ -24,6 +32,11 @@ def openrouter_model_id(model_name):
         return OPENROUTER_MODELS[model_name]
     except KeyError:
         raise ValueError(f"Unknown OpenRouter model: {model_name}") from None
+
+
+def openrouter_provider_tag(model_id):
+    """The provider endpoint tag for provider.options on OpenRouter."""
+    return OPENROUTER_PROVIDER_TAGS.get(model_id, model_id.split("/", 1)[0])
 
 
 def is_distil_model(model_name):

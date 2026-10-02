@@ -19,12 +19,20 @@ from asr_openrouter import build_request_body, encode_wav, openrouter_api_key, t
 class OpenRouterModelTests(unittest.TestCase):
     def test_gpt_transcribe_is_hosted_and_multilingual(self):
         self.assertTrue(is_openrouter_model("gpt-transcribe"))
+        self.assertTrue(is_openrouter_model("openai/gpt-transcribe"))
         self.assertFalse(is_openrouter_model("qwen3-asr-1.7b"))
         self.assertFalse(is_english_only_model("gpt-transcribe"))
         self.assertEqual(multilingual_model("gpt-transcribe"), "gpt-transcribe")
 
+    def test_mai_transcribe_is_hosted_and_multilingual(self):
+        self.assertTrue(is_openrouter_model("mai-transcribe-2"))
+        self.assertTrue(is_openrouter_model("microsoft/mai-transcribe-2"))
+        self.assertFalse(is_english_only_model("mai-transcribe-2"))
+        self.assertEqual(multilingual_model("mai-transcribe-2"), "mai-transcribe-2")
+
     def test_locally_selected_hosted_model_wins_over_server_model(self):
         self.assertEqual(effective_remote_model("gpt-transcribe", "medium.en", "nl"), "gpt-transcribe")
+        self.assertEqual(effective_remote_model("mai-transcribe-2", "medium.en", "nl"), "mai-transcribe-2")
 
 
 class RequestTests(unittest.TestCase):
@@ -41,6 +49,14 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(body["input_audio"], {"data": base64.b64encode(b"RIFF").decode(), "format": "wav"})
         self.assertEqual(body["language"], "en")
         self.assertEqual(body["provider"], {"options": {"openai": {"prompt": "Vocabulary: VDX."}}})
+
+    def test_body_has_azure_options_for_mai_transcribe(self):
+        body = build_request_body("mai-transcribe-2", b"RIFF", language="nl", prompt="Vocabulary: VDX.")
+        self.assertEqual(body["model"], "microsoft/mai-transcribe-2")
+        self.assertEqual(body["input_audio"], {"data": base64.b64encode(b"RIFF").decode(), "format": "wav"})
+        self.assertEqual(body["language"], "nl")
+        self.assertEqual(body["provider"]["options"]["azure"], {"prompt": "Vocabulary: VDX."})
+        self.assertEqual(body["provider"]["options"]["microsoft"], {"prompt": "Vocabulary: VDX."})
 
     def test_blank_language_and_prompt_are_left_out(self):
         body = build_request_body("gpt-transcribe", b"x", language="", prompt="  ")
@@ -77,11 +93,11 @@ if __name__ == "__main__":
 
 
 class AppRoutingTests(unittest.TestCase):
-    def app(self, remote_enabled):
+    def app(self, remote_enabled, model="gpt-transcribe"):
         from whisper_dictate import WhisperDictate
         a = object.__new__(WhisperDictate)
         a.model = None
-        a.config = {"model": "gpt-transcribe", "cpu_fallback_model": "base", "language": "en",
+        a.config = {"model": model, "cpu_fallback_model": "base", "language": "en",
                     "sample_rate": 16000,
                     "remote_server": {"enabled": remote_enabled, "model": "medium.en"}}
         a.get_asr_context = lambda: "ctx"
@@ -89,6 +105,14 @@ class AppRoutingTests(unittest.TestCase):
 
     def test_remote_on_goes_to_openrouter_not_the_server(self):
         a = self.app(True)
+        with mock.patch("whisper_dictate.transcribe_openrouter", return_value="hi") as t, \
+                mock.patch("whisper_dictate.socket.create_connection") as conn:
+            self.assertEqual(a.transcribe_remote(np.zeros(4, dtype=np.float32), prompt="p"), "hi")
+        conn.assert_not_called()
+        self.assertEqual(t.call_args.kwargs["prompt"], "p")
+
+    def test_mai_transcribe_remote_on_goes_to_openrouter_not_the_server(self):
+        a = self.app(True, model="mai-transcribe-2")
         with mock.patch("whisper_dictate.transcribe_openrouter", return_value="hi") as t, \
                 mock.patch("whisper_dictate.socket.create_connection") as conn:
             self.assertEqual(a.transcribe_remote(np.zeros(4, dtype=np.float32), prompt="p"), "hi")
@@ -103,8 +127,23 @@ class AppRoutingTests(unittest.TestCase):
             self.assertEqual(a._transcribe_local(np.zeros(4, dtype=np.float32)), "hi")
         load.assert_not_called()
 
+    def test_mai_transcribe_remote_off_goes_to_openrouter_without_loading(self):
+        a = self.app(False, model="mai-transcribe-2")
+        with mock.patch("whisper_dictate.transcribe_openrouter", return_value="hi"), \
+                mock.patch("whisper_dictate.whisper.load_model") as load:
+            a.load_model("mai-transcribe-2")
+            self.assertEqual(a._transcribe_local(np.zeros(4, dtype=np.float32)), "hi")
+        load.assert_not_called()
+
     def test_probe_needs_only_an_api_key(self):
         a = self.app(True)
+        with mock.patch.dict("os.environ", {"OPENROUTER_API_KEY": "k"}):
+            self.assertTrue(a.probe_remote_service())
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertFalse(a.probe_remote_service())
+
+    def test_mai_transcribe_probe_needs_only_an_api_key(self):
+        a = self.app(True, model="mai-transcribe-2")
         with mock.patch.dict("os.environ", {"OPENROUTER_API_KEY": "k"}):
             self.assertTrue(a.probe_remote_service())
         with mock.patch.dict("os.environ", {}, clear=True):
