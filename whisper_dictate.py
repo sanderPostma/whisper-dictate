@@ -34,6 +34,7 @@ from asr_context import context_from_config
 from asr_models import (
     build_remote_header,
     effective_remote_model,
+    fallback_chain,
     is_distil_model,
     is_english_only_model,
     is_openrouter_model,
@@ -117,6 +118,10 @@ DEFAULT_CONFIG = {
     # Open the gate on a 10 ms slice, not the whole callback block, so a
     # leading consonant is not averaged under the threshold.
     "silence_gate_attack_ms": 10,
+    # Tried in order after the selected model fails. Hosted, then local Qwen,
+    # then a local Whisper checkpoint. cpu_fallback_model is the legacy
+    # one-entry form of this list.
+    "fallback_models": ["gpt-transcribe", "qwen3-asr-1.7b", "base"],
     "output_mode": "type",  # type, clipboard, or both
     "context_pack": "none",  # none | developer | custom
     "context_prompt": "",
@@ -348,11 +353,18 @@ class WhisperDictate:
             self.remember_model_for_language(model_name=normalized_model)
             changes.append(f"model {model} -> {normalized_model}")
 
-        fallback = self.config.get("cpu_fallback_model", "base.en")
-        normalized_fallback = self.get_multilingual_model(fallback)
-        if normalized_fallback != fallback:
-            self.config["cpu_fallback_model"] = normalized_fallback
-            changes.append(f"fallback {fallback} -> {normalized_fallback}")
+        raw_fallbacks = self.config.get("fallback_models")
+        if isinstance(raw_fallbacks, list) and raw_fallbacks:
+            normalized_list = fallback_chain(raw_fallbacks, language=self.config.get("language", "en"))
+            if normalized_list != raw_fallbacks:
+                self.config["fallback_models"] = normalized_list
+                changes.append(f"fallbacks {raw_fallbacks} -> {normalized_list}")
+        else:
+            fallback = self.config.get("cpu_fallback_model", "base.en")
+            normalized_fallback = self.get_multilingual_model(fallback)
+            if normalized_fallback != fallback:
+                self.config["cpu_fallback_model"] = normalized_fallback
+                changes.append(f"fallback {fallback} -> {normalized_fallback}")
 
         remote_config = self.get_remote_config()
         remote_model = remote_config.get("model")
@@ -373,17 +385,26 @@ class WhisperDictate:
             self.config.get("language", "en"),
         )
 
-    def get_cpu_fallback_model(self):
-        """Get local fallback model used when remote is down.
+    def get_fallback_models(self):
+        """Models to try, in order, after the selected one fails.
 
-        Strips the `.en` suffix when the configured language is not English,
-        so Dutch audio doesn't get transcribed by an English-only model.
+        `fallback_models` when it is a non-empty list, otherwise the single
+        legacy `cpu_fallback_model`.
         """
-        model = self.config.get("cpu_fallback_model", "base.en")
-        language = self.config.get("language", "en")
-        if language != "en" and model.endswith(".en"):
-            return model[: -len(".en")]
-        return model
+        raw = self.config.get("fallback_models")
+        if not isinstance(raw, list) or not any(isinstance(m, str) and m.strip() for m in raw):
+            raw = [self.config.get("cpu_fallback_model", "base.en")]
+        return fallback_chain(raw, language=self.config.get("language", "en"))
+
+    def get_cpu_fallback_model(self):
+        """First local model in the fallback chain.
+
+        Preload uses this: a hosted fallback has nothing to load.
+        """
+        for model in self.get_fallback_models():
+            if not is_openrouter_model(model):
+                return model
+        return "base"
     
     def load_replacements(self):
         """Load text replacements from YAML file."""
@@ -944,6 +965,30 @@ class WhisperDictate:
         elapsed = time.time() - start_time
         print(f"[whisper-dictate] Local transcription took {elapsed:.2f}s ({model_name})")
         return text
+
+    def _transcribe_one(self, audio, model, prompt, timeout):
+        """Transcribe with one named model, hosted or local."""
+        if is_openrouter_model(model):
+            return self.transcribe_openrouter(audio, model, prompt=prompt, timeout=timeout)
+        return self._transcribe_local(audio, model_name=model, prompt=prompt)
+
+    def _transcribe_fallbacks(self, audio, prompt, timeout=60, skip=None):
+        """Try fallback_models in order. `skip` is the model that just failed."""
+        errors = []
+        tried = False
+        for model in self.get_fallback_models():
+            if model == skip:
+                continue
+            tried = True
+            try:
+                print(f"[whisper-dictate] Fallback trying {model}")
+                return self._transcribe_one(audio, model, prompt, timeout)
+            except Exception as e:
+                errors.append(f"{model}: {e}")
+                print(f"[whisper-dictate] Fallback {model} failed: {e}")
+        if not tried:
+            raise RuntimeError("no fallback model configured")
+        raise RuntimeError("; ".join(errors))
     
     def transcribe_and_paste(self, audio, recording=None):
         """Transcribe audio and paste result."""
@@ -998,32 +1043,32 @@ class WhisperDictate:
         try:
             remote_config = self.get_remote_config()
             remote_enabled = remote_config.get("enabled", False)
-            local_fallback_model = self.get_cpu_fallback_model()
             if remote_enabled:
                 with self.remote_state_lock:
                     remote_known_down = (self.remote_available is False)
 
                 if remote_known_down:
                     print(
-                        f"[whisper-dictate] Remote unavailable, using local fallback model: "
-                        f"{local_fallback_model}"
+                        "[whisper-dictate] Remote unavailable, fallback chain: "
+                        + " -> ".join(self.get_fallback_models())
                     )
-                    text = self._transcribe_local(audio, model_name=local_fallback_model, prompt=prompt)
+                    text = self._transcribe_fallbacks(audio, prompt)
                 else:
                     try:
                         text = self.transcribe_remote(audio, prompt=prompt)
                         self.set_remote_available(True)
                     except Exception as e:
                         self.set_remote_available(False, str(e))
-                        if self.is_english_only_model(local_fallback_model):
+                        if not self.get_fallback_models():
                             err = str(e)[:200]
                             GLib.idle_add(lambda err=err: (
-                                self.notify(f"Remote failed; fallback model is English-only.\n{err}"),
+                                self.notify(f"Remote failed; no fallback model for this language.\n{err}"),
                                 self.update_status("Remote failed"),
                             ) and False)
                             return
-                        GLib.idle_add(lambda: self.update_status("Remote failed, using local..."))
-                        text = self._transcribe_local(audio, model_name=local_fallback_model, prompt=prompt)
+                        GLib.idle_add(lambda: self.update_status("Remote failed, trying fallbacks..."))
+                        text = self._transcribe_fallbacks(
+                            audio, prompt, skip=self.get_remote_model())
             else:
                 text = self._transcribe_local(audio, model_name=self.config.get("model", "base"), prompt=prompt)
         except Exception as e:
@@ -1079,7 +1124,6 @@ class WhisperDictate:
     def _live_transcribers(self):
         """(fast, correct) transcribers for a live session; correct may be None."""
         model = self.config.get("model", "base")
-        fallback_model = self.get_cpu_fallback_model()
 
         def remote(audio, prompt):
             return self.transcribe_remote(audio, timeout=10, prompt=prompt)
@@ -1088,7 +1132,7 @@ class WhisperDictate:
             return self._transcribe_local(audio, model_name=model, prompt=prompt)
 
         def local_fallback(audio, prompt):
-            return self._transcribe_local(audio, model_name=fallback_model, prompt=prompt)
+            return self._transcribe_fallbacks(audio, prompt, timeout=10, skip=self.get_remote_model())
 
         def remote_is_down():
             with self.remote_state_lock:
@@ -1420,9 +1464,7 @@ class WhisperDictate:
                 return text
             except Exception as e:
                 self.set_remote_available(False, str(e))
-                return self._transcribe_local(
-                    audio, model_name=self.get_cpu_fallback_model()
-                )
+                return self._transcribe_fallbacks(audio, None, timeout=180, skip=self.get_remote_model())
         return self._transcribe_local(
             audio, model_name=self.config.get("model", "base")
         )
@@ -2491,7 +2533,8 @@ class WhisperDictate:
         print(f"Mode: {mode} | Model: {self.config['model']} | Language: {self.config['language']}")
         print(
             f"Remote: {remote_cfg.get('enabled')} | {remote_cfg.get('host')}:{remote_cfg.get('port')} "
-            f"| Remote model: {self.get_remote_model()} | Local fallback: {self.get_cpu_fallback_model()}"
+            f"| Remote model: {self.get_remote_model()} | "
+            f"Fallbacks: {' -> '.join(self.get_fallback_models())}"
         )
         print(f"Hotkey: {hotkey}")
         print(f"Click tray icon or press hotkey to record")

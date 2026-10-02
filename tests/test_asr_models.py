@@ -9,6 +9,7 @@ from asr_models import (
     QWEN_MODELS,
     build_remote_header,
     effective_remote_model,
+    fallback_chain,
     is_distil_model,
     is_english_only_model,
     is_openrouter_model,
@@ -33,6 +34,20 @@ class OpenRouterModelMappingTests(unittest.TestCase):
         self.assertEqual(openrouter_provider_tag("openai/gpt-transcribe"), "openai")
         self.assertEqual(openrouter_provider_tag("microsoft/mai-transcribe-2"), "azure")
         self.assertEqual(openrouter_provider_tag("custom/model"), "custom")
+
+
+class FallbackChainTests(unittest.TestCase):
+    def test_keeps_order_and_drops_blanks_and_duplicates(self):
+        self.assertEqual(
+            fallback_chain(["gpt-transcribe", "", "qwen3-asr-1.7b", "gpt-transcribe", "base"]),
+            ["gpt-transcribe", "qwen3-asr-1.7b", "base"],
+        )
+
+    def test_non_english_rewrites_english_only_ids(self):
+        self.assertEqual(
+            fallback_chain(["base.en", "distil-large-v3", "qwen3-asr-1.7b"], language="nl"),
+            ["base", "large", "qwen3-asr-1.7b"],
+        )
 
 
 class QwenModelMappingTests(unittest.TestCase):

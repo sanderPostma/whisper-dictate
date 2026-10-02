@@ -66,6 +66,28 @@ def qwen_hf_id(model_name):
         raise ValueError(f"Unknown Qwen ASR model: {model_name}") from None
 
 
+def fallback_chain(names, language="en"):
+    """Ordered fallback models, blanks and duplicates removed.
+
+    For a non-English language, `.en` and distil ids are rewritten to a
+    multilingual model. An id that is still English-only is left out.
+    """
+    chain = []
+    for name in names or []:
+        if not isinstance(name, str):
+            continue
+        name = name.strip()
+        if not name:
+            continue
+        if language != "en":
+            name = multilingual_model(name)
+            if is_english_only_model(name):
+                continue
+        if name not in chain:
+            chain.append(name)
+    return chain
+
+
 def effective_remote_model(local_model, remote_model, language="en"):
     """Prefer a locally selected Qwen or OpenRouter model over the server's."""
     if is_qwen_model(local_model) or is_openrouter_model(local_model):
