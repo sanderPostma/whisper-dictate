@@ -224,7 +224,7 @@ Hosted models called over the OpenRouter API:
 - `gpt-transcribe`: OpenAI's hosted model (`openai/gpt-transcribe`).
 - `mai-transcribe-2`: Microsoft AI's model (`microsoft/mai-transcribe-2`), Azure-backed, ranked #1 on the FLEURS multilingual benchmark across 60 languages.
 
-The API key comes from `$OPENROUTER_API_KEY`, else `openrouter_api_key` in `config.json`. Hosted models bypass the remote server even when remote mode is on; if the call fails, the local fallback model takes over as with a down server. The vocabulary/context prompt and language are sent along. Usage is billed per second of audio (the cost of each call is logged).
+The API key comes from `$OPENROUTER_API_KEY`, else `openrouter_api_key` in `config.json`. Hosted models bypass the remote server even when remote mode is on; if the call fails, the local fallback model takes over as with a down server. Language is sent with both. `gpt-transcribe` also receives the vocabulary text, including earlier words from the live session, as a prompt. `mai-transcribe-2` receives only the `Vocabulary:` terms, as an Azure phrase list (keyword hints, not a prefix). Usage is billed per second of audio (the cost of each call is logged).
 
 ASR context is set in config files (no tray control for now):
 
@@ -234,7 +234,7 @@ ASR context is set in config files (no tray control for now):
 | `developer` | Built-in git/K8s/Python/JS/CLI jargon list |
 | `custom` | `~/.config/whisper-dictate/context.txt` |
 
-Set `context_pack` / `context_prompt` in `config.json`. `context_prompt` is appended in every case. Qwen receives this as `prompt`; Whisper as `initial_prompt`. Replacements in `replacements.yml` still run after transcription.
+Set `context_pack` / `context_prompt` in `config.json`. `context_prompt` is appended in every case. Qwen receives this as `prompt`; Whisper as `initial_prompt`; `gpt-transcribe` as its prompt. `mai-transcribe-2` uses the comma-separated terms on `Vocabulary:` lines as a phrase list. Replacements in `replacements.yml` still run after transcription.
 
 ### Text Replacements
 
@@ -273,7 +273,7 @@ See `replacements.example.yml` for a full example.
 | large | ~30s+ | Best | ~10GB |
 | qwen3-asr-1.7b | GPU: fast / CPU: slow | Strong, promptable | ~6–10GB VRAM |
 | gpt-transcribe | ~0.5–1s round trip | Strong, promptable | none (hosted, paid) |
-| mai-transcribe-2 | ~0.5–1s round trip | #1 FLEURS multilingual (60 langs), promptable | none (hosted, paid) |
+| mai-transcribe-2 | ~0.5–1s round trip | #1 FLEURS multilingual (60 langs), phrase list | none (hosted, paid) |
 
 ## Autostart
 

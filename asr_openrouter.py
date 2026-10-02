@@ -34,6 +34,20 @@ def encode_wav(audio, sample_rate=16000):
     return buf.getvalue()
 
 
+def vocabulary_phrases(prompt):
+    """Terms from 'Vocabulary:' lines. Other lines are prior transcript, not hints."""
+    phrases = []
+    for raw_line in str(prompt).splitlines():
+        line = raw_line.strip()
+        if not line.lower().startswith("vocabulary:"):
+            continue
+        for part in line.split(":", 1)[1].split(","):
+            phrase = part.strip().rstrip(".")
+            if phrase:
+                phrases.append(phrase)
+    return list(dict.fromkeys(phrases))
+
+
 def build_request_body(model_name, wav_bytes, language=None, prompt=None):
     model_id = openrouter_model_id(model_name)
     body = {
@@ -43,14 +57,16 @@ def build_request_body(model_name, wav_bytes, language=None, prompt=None):
     if language and str(language).strip():
         body["language"] = language
     if prompt and str(prompt).strip():
-        # The prompt is not normalized by OpenRouter; it goes to the provider
-        # under its own slug ("openai" for openai/gpt-transcribe, "azure" for microsoft/mai-transcribe-2).
+        # OpenRouter does not normalize prompt. gpt-transcribe takes it under
+        # its provider slug. MAI-Transcribe-2 has no prompt; keyword hints are
+        # provider.options.azure.phraseList.phrases.
         tag = openrouter_provider_tag(model_id)
-        prefix = model_id.split("/", 1)[0]
-        options = {tag: {"prompt": prompt}}
-        if prefix != tag:
-            options[prefix] = {"prompt": prompt}
-        body["provider"] = {"options": options}
+        if model_id == "microsoft/mai-transcribe-2":
+            phrases = vocabulary_phrases(prompt)
+            if phrases:
+                body["provider"] = {"options": {tag: {"phraseList": {"phrases": phrases}}}}
+        else:
+            body["provider"] = {"options": {tag: {"prompt": prompt}}}
     return body
 
 

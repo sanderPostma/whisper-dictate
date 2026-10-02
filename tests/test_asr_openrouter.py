@@ -50,13 +50,21 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(body["language"], "en")
         self.assertEqual(body["provider"], {"options": {"openai": {"prompt": "Vocabulary: VDX."}}})
 
-    def test_body_has_azure_options_for_mai_transcribe(self):
-        body = build_request_body("mai-transcribe-2", b"RIFF", language="nl", prompt="Vocabulary: VDX.")
+    def test_body_has_azure_phrase_list_for_mai_transcribe(self):
+        prompt = "Vocabulary: VDX, git, git, pull request.\nOne. Two"
+        body = build_request_body("mai-transcribe-2", b"RIFF", language="nl", prompt=prompt)
         self.assertEqual(body["model"], "microsoft/mai-transcribe-2")
         self.assertEqual(body["input_audio"], {"data": base64.b64encode(b"RIFF").decode(), "format": "wav"})
         self.assertEqual(body["language"], "nl")
-        self.assertEqual(body["provider"]["options"]["azure"], {"prompt": "Vocabulary: VDX."})
-        self.assertEqual(body["provider"]["options"]["microsoft"], {"prompt": "Vocabulary: VDX."})
+        self.assertEqual(body["provider"], {
+            "options": {"azure": {"phraseList": {"phrases": ["VDX", "git", "pull request"]}}},
+        })
+        self.assertNotIn("prompt", json.dumps(body["provider"]))
+
+    def test_mai_transcribe_omits_phrase_list_when_prompt_has_no_terms(self):
+        body = build_request_body("mai-transcribe-2", b"RIFF", language="en", prompt="One. Two")
+        self.assertEqual(body["language"], "en")
+        self.assertNotIn("provider", body)
 
     def test_blank_language_and_prompt_are_left_out(self):
         body = build_request_body("gpt-transcribe", b"x", language="", prompt="  ")
