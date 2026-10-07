@@ -1328,6 +1328,10 @@ class WhisperDictate:
         """Start mic+speakers transcription, chunked, streamed to a tempfile."""
         if getattr(self, "transcribe_active", False) or self.recording:
             return False
+        if getattr(self, "transcribe_finalizing", False):
+            # The previous session's state is still in use until it is saved.
+            self.notify("Previous transcript is still finalizing.")
+            return False
         if getattr(self, "live_active", False) or getattr(self, "live_busy", False):
             self.notify("Live dictation is running; stop it first.")
             return False
@@ -1498,18 +1502,9 @@ class WhisperDictate:
         """Stop the session, wait for pending chunks, then prompt to save."""
         if not getattr(self, "transcribe_active", False):
             return False
-        self.transcribe_active = False
-
-        try:
-            self.transcribe_mic_stream.stop()
-            self.transcribe_mic_stream.close()
-        except Exception:
-            pass
-        try:
-            self.transcribe_parec.terminate()
-            self.transcribe_parec.wait(timeout=2)
-        except Exception:
-            pass
+        self._end_transcribe_capture()
+        self.transcribe_finalizing = True
+        src = self.transcribe_tempfile_path
 
         self.beep_stop()
         self.refresh_action_marks()
@@ -1550,12 +1545,32 @@ class WhisperDictate:
                         f"Transcript finalized with {failed} failed chunk(s)."
                     ) or False
                 )
-            GLib.idle_add(self._show_save_transcribe_dialog)
+            self.transcribe_finalizing = False
+            GLib.idle_add(self._show_save_transcribe_dialog, src)
         threading.Thread(target=finalize, daemon=True).start()
         return False
 
-    def _show_save_transcribe_dialog(self):
-        src = self.transcribe_tempfile_path
+    def _end_transcribe_capture(self):
+        """Stop the mic and speaker capture of the transcribe session."""
+        self.transcribe_active = False
+        try:
+            self.transcribe_mic_stream.stop()
+            self.transcribe_mic_stream.close()
+        except Exception:
+            pass
+        try:
+            self.transcribe_parec.terminate()
+            self.transcribe_parec.wait(timeout=2)
+        except Exception:
+            pass
+
+    def _show_save_transcribe_dialog(self, src):
+        """Offer to save the transcript at src, without blocking the main loop.
+
+        A modal dialog.run() here nests a main loop inside an idle callback:
+        when the dialog ends up behind other windows, every later save dialog
+        and Quit wait on it.
+        """
         dialog = Gtk.FileChooserDialog(
             title="Save transcript",
             action=Gtk.FileChooserAction.SAVE,
@@ -1566,10 +1581,22 @@ class WhisperDictate:
         )
         dialog.set_current_name(f"transcript-{time.strftime('%Y%m%d-%H%M%S')}.txt")
         dialog.set_do_overwrite_confirmation(True)
-        response = dialog.run()
-        dest = dialog.get_filename() if response == Gtk.ResponseType.OK else None
-        dialog.destroy()
+        dialog.set_position(Gtk.WindowPosition.MOUSE)
+        dialog.set_keep_above(True)
+        dialog.connect("response", self._on_save_transcribe_response, src)
+        self.transcribe_save_dialogs = getattr(self, "transcribe_save_dialogs", set())
+        self.transcribe_save_dialogs.add(dialog)
+        dialog.show_all()
+        dialog.present()
+        return False
 
+    def _on_save_transcribe_response(self, dialog, response, src):
+        dest = dialog.get_filename() if response == Gtk.ResponseType.OK else None
+        self.transcribe_save_dialogs.discard(dialog)
+        dialog.destroy()
+        self._finish_transcript(src, response, dest)
+
+    def _finish_transcript(self, src, response, dest):
         if dest:
             try:
                 shutil.copyfile(src, dest)
@@ -1584,9 +1611,7 @@ class WhisperDictate:
             self.notify("Transcript discarded")
         else:
             self.notify(f"Transcript kept at {src}")
-
         self.update_status("Ready")
-        return False
 
     def _kitty_send_text(self, text):
         """Try kitty @ send-text via remote control. Returns True on success."""
@@ -2514,6 +2539,13 @@ class WhisperDictate:
         """Quit application."""
         if getattr(self, "live_active", False):
             self.stop_live()
+        if getattr(self, "transcribe_active", False):
+            self._end_transcribe_capture()
+            print(f"[transcribe-session] quit; transcript kept at {self.transcribe_tempfile_path}")
+        for dialog in list(getattr(self, "transcribe_save_dialogs", ())):
+            # Destroying emits no response: the transcript stays in its tempfile.
+            dialog.destroy()
+        self.transcribe_save_dialogs = set()
         self.stop_remote_monitor()
         Gtk.main_quit()
     
