@@ -134,7 +134,10 @@ second quick press drops that recording and switches to live. Text is typed at e
 (~0.6 s). With the remote server up, the last ≤ 12 s are re-transcribed after each pause
 and recently typed words are corrected in place (backspace + retype). The next press of the
 hotkey stops live dictation. `live_double_press_s` sets the window (default 1.0 s);
-`live_hotkey` can add a separate live hotkey (off by default).
+`live_hotkey` can add a separate live hotkey (off by default). When a Microsoft Teams call
+starts (Teams holds a PipeWire capture stream), live dictation stops by itself;
+`stop_live_on_teams_call` turns that off (default on). Detection uses `pactl`, so it needs
+PipeWire. Teams running in a browser is not detected, since the capture then belongs to the browser.
 
 - WezTerm pane running `achat run`: typed into the agent's prompt line through achat's
   input-control socket. Every edit is checked against the line's revision, so typing by

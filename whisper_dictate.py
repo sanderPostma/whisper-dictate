@@ -50,6 +50,7 @@ from live_commands import parse_auto_setting, parse_clear, parse_clipboard, pars
 from text_fixes import (DEFAULT_SHELL_ALIASES, DEFAULT_SHELL_COMMANDS, DEFAULT_SLASH_COMMANDS, fix_shell_command,
                         fix_slash_command, fix_ticket_keys, lower_case, manual_punctuation)
 from live_controller import LiveController, select_transcribers
+from teams_call_watcher import TeamsCallWatcher
 from live_output import WezTermTarget, XdotoolTarget, choose_target, clipboard_key, is_terminal, press_key
 from live_segmenter import LiveSegmenter, SilenceGate
 from live_session import Edit, LiveSession, is_slash_command, normalise
@@ -131,6 +132,8 @@ DEFAULT_CONFIG = {
     # An extra dedicated hotkey is optional (e.g. "<Alt><Shift>d").
     "live_hotkey": "",
     "live_double_press_s": 1.0,
+    # Stop live dictation when a Microsoft Teams call starts (PipeWire mic capture).
+    "stop_live_on_teams_call": True,
     "live_pause_ms": 600,
     "live_max_chunk_s": 8,
     "live_window_max_s": 12,
@@ -1271,6 +1274,12 @@ class WhisperDictate:
             self.live_controller.submit(event)
         self.live_controller.stop()
         self.update_status("Finishing live dictation...")
+
+    def _stop_live_for_teams(self):
+        if getattr(self, "live_active", False):
+            self.notify("Teams call started: live dictation stopped.")
+            self.stop_live()
+        return False
 
     def _live_done(self):
         started = getattr(self, "_live_stream_started", False)
@@ -2592,6 +2601,11 @@ class WhisperDictate:
                 print(f"✓ Live hotkey {live_hotkey} registered")
             else:
                 print(f"✗ Failed to register live hotkey {live_hotkey}")
+
+        self.teams_watcher = None
+        if self.config.get("stop_live_on_teams_call", True):
+            self.teams_watcher = TeamsCallWatcher(lambda: GLib.idle_add(self._stop_live_for_teams))
+            self.teams_watcher.start()
 
         # Create indicator
         if HAS_APPINDICATOR:
