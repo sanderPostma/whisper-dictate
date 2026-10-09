@@ -128,10 +128,8 @@ DEFAULT_CONFIG = {
     "context_prompt": "",
     "record_timeout_ms": 60000,  # auto-stop after this; hold Alt to extend
     "transcribe_chunk_seconds": 25,
-    # Live dictation: press the hotkey twice within live_double_press_s.
-    # An extra dedicated hotkey is optional (e.g. "<Alt><Shift>d").
-    "live_hotkey": "",
-    "live_double_press_s": 1.0,
+    # Live dictation hotkey. <Mod5> is AltGr on this layout (ISO_Level3_Shift).
+    "live_hotkey": "<Mod5>l",
     # Stop live dictation when a Microsoft Teams call starts (PipeWire mic capture).
     "stop_live_on_teams_call": True,
     "live_pause_ms": 600,
@@ -175,20 +173,17 @@ DEFAULT_CONFIG = {
 }
 
 
-def hotkey_action(live_active, live_busy, recording, since_start, double_press_s=1.0):
+def hotkey_action(live_active, live_busy, recording):
     """What one press of the dictation hotkey does.
 
-    Press once: record (one-shot). Press again within double_press_s: drop
-    that recording and switch to live dictation. Any later press stops
-    whichever mode is running.
+    Press once to start a recording, press again to stop it. A press during
+    live dictation stops live dictation. Live has its own hotkey (live_hotkey).
     """
     if live_active:
         return "stop_live"
     if live_busy:
         return "busy"
     if recording:
-        if since_start is not None and since_start < double_press_s:
-            return "to_live"
         return "stop_recording"
     return "start_recording"
 
@@ -611,20 +606,12 @@ class WhisperDictate:
     
     def _toggle_recording_impl(self):
         """Actual toggle implementation (runs in main thread)."""
-        started = getattr(self, "_recording_started", None)
         action = hotkey_action(
-            getattr(self, "live_active", False), getattr(self, "live_busy", False),
-            self.recording, None if started is None else time.monotonic() - started,
-            float(self.config.get("live_double_press_s", 1.0)),
-        )
+            getattr(self, "live_active", False), getattr(self, "live_busy", False), self.recording)
         if action == "stop_live":
             self.stop_live()
         elif action == "busy":
             self.notify("Live dictation is still finishing; try again in a moment.")
-        elif action == "to_live":
-            print("[whisper-dictate] Double press: switching to live dictation")
-            self.cancel_recording()
-            self.start_live(double_beep=True)
         elif action == "stop_recording":
             self.stop_recording()
         else:
@@ -655,7 +642,6 @@ class WhisperDictate:
             return
         
         self.recording = True
-        self._recording_started = time.monotonic()
         self.audio_data = []
         self.update_icon(True)
         self.update_status("🔴 Recording...")

@@ -128,13 +128,11 @@ marks, also in "the trial period".
 
 ## Live dictation
 
-Press the dictation hotkey (`<Alt>d`) twice within a second (double beep), or pick
-**⚡ Live dictation** in the tray, then talk. A single press still records one-shot; the
-second quick press drops that recording and switches to live. Text is typed at each pause
-(~0.6 s). With the remote server up, the last ≤ 12 s are re-transcribed after each pause
-and recently typed words are corrected in place (backspace + retype). The next press of the
-hotkey stops live dictation. `live_double_press_s` sets the window (default 1.0 s);
-`live_hotkey` can add a separate live hotkey (off by default). When a Microsoft Teams call
+Press `live_hotkey` (default `<Mod5>l`, AltGr+L) or pick **⚡ Live dictation** in the tray,
+then talk. Text is typed at each pause (~0.6 s). With the remote server up, the last ≤ 12 s
+are re-transcribed after each pause and recently typed words are corrected in place
+(backspace + retype). The next press of the live hotkey stops live dictation. The dictation
+hotkey (`<Alt>d`) is a plain record toggle: press to start, press to stop. When a Microsoft Teams call
 starts (Teams holds a PipeWire capture stream), live dictation stops by itself;
 `stop_live_on_teams_call` turns that off (default on). Detection uses `pactl`, so it needs
 PipeWire. Teams running in a browser is not detected, since the capture then belongs to the browser.
@@ -188,7 +186,7 @@ and redraw while an agent works, so the terminal's cursor row is often another r
 
 Config keys: `live_pause_ms`, `live_max_chunk_s`, `live_window_max_s`,
 `live_commit_pause_ms`, `live_max_backspace`, `live_max_command_backspace`, `live_corrections`,
-`live_committed_context_chars`, `live_hotkey`, `live_double_press_s`.
+`live_committed_context_chars`, `live_hotkey`.
 
 ## Configuration
 
