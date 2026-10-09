@@ -128,7 +128,7 @@ marks, also in "the trial period".
 
 ## Live dictation
 
-Press `live_hotkey` (default `<Mod5>l`, AltGr+L) or pick **⚡ Live dictation** in the tray,
+Press `live_hotkey` (default `<Alt>l`: Alt+L, or AltGr+L on a layout where AltGr sends Alt) or pick **⚡ Live dictation** in the tray,
 then talk. Text is typed at each pause (~0.6 s). With the remote server up, the last ≤ 12 s
 are re-transcribed after each pause and recently typed words are corrected in place
 (backspace + retype). The next press of the live hotkey stops live dictation. The dictation

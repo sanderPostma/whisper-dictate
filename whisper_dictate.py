@@ -90,6 +90,7 @@ COMMAND_VOCABULARY = [
 ]
 
 PLAYBACK_LEAD_S = 0.8  # default for config "playback_lead_ms"
+BEEP_LEAD_S = 0.3  # silence before a beep, so a waking output does not clip it
 # Per worker thread: the audio the last transcription call sent to its model.
 _sent_audio = threading.local()
 
@@ -128,8 +129,9 @@ DEFAULT_CONFIG = {
     "context_prompt": "",
     "record_timeout_ms": 60000,  # auto-stop after this; hold Alt to extend
     "transcribe_chunk_seconds": 25,
-    # Live dictation hotkey. <Mod5> is AltGr on this layout (ISO_Level3_Shift).
-    "live_hotkey": "<Mod5>l",
+    # Live dictation hotkey. On this keyboard AltGr sends Alt (Mod1), so <Alt>l
+    # covers both Alt+L and AltGr+L.
+    "live_hotkey": "<Alt>l",
     # Stop live dictation when a Microsoft Teams call starts (PipeWire mic capture).
     "stop_live_on_teams_call": True,
     "live_pause_ms": 600,
@@ -1133,7 +1135,7 @@ class WhisperDictate:
             lambda ok, reason: self.set_remote_available(ok, reason),
         )
 
-    def start_live(self, retry=False, double_beep=False):
+    def start_live(self, retry=False):
         if self.recording or getattr(self, "transcribe_active", False):
             self.notify("Stop the current recording before starting live dictation.")
             return
@@ -1152,7 +1154,7 @@ class WhisperDictate:
                   f"class={wm_class!r}, retry={retry})")
             if not retry:
                 # Focus can be in flux right at the hotkey; look once more.
-                GLib.timeout_add(250, lambda: self.start_live(retry=True, double_beep=double_beep) or False)
+                GLib.timeout_add(250, lambda: self.start_live(retry=True) or False)
                 return
             self.notify("Live dictation: no focused window found.")
             return
@@ -1220,10 +1222,7 @@ class WhisperDictate:
             return
         self._live_stream_started = True
         self.live_active = True
-        if double_beep:
-            self.beep_double()
-        else:
-            self.beep_start()
+        self.beep_double()
         self.update_icon(True, steady=True)
         suffix = "" if correct else " (no corrections)"
         self.update_status(f"⚡ Live → {target.name}{suffix}")
@@ -1812,42 +1811,42 @@ class WhisperDictate:
         self.update_status("Ready")
         print(f"Transcribed: {text}")
     
-    def beep(self, frequency=800, duration=0.1):
-        """Play a short beep sound."""
+    def _play_beep(self, *tones):
+        """Play (frequency, duration) tones, each separated by a short gap.
+
+        The output can be asleep when a beep starts, and PipeWire then cuts off
+        the first part of the sound. The 80 ms beeps were lost that way, so
+        they get a silent lead-in and a large buffer, as playback does.
+        """
         try:
             sample_rate = 22050
-            t = np.linspace(0, duration, int(sample_rate * duration), False)
-            tone = np.sin(frequency * 2 * np.pi * t) * 0.3
-            # Fade in/out to avoid clicks
-            fade_len = int(sample_rate * 0.01)
-            tone[:fade_len] *= np.linspace(0, 1, fade_len)
-            tone[-fade_len:] *= np.linspace(1, 0, fade_len)
-            sd.play(tone.astype(np.float32), sample_rate, blocking=False)
-        except Exception as e:
-            print(f"[whisper-dictate] Beep failed: {e}")
-    
-    def beep_start(self):
-        """Beep for recording start (higher tone)."""
-        self.beep(frequency=1200, duration=0.08)
-    
-    def beep_double(self):
-        """Two quick high beeps: live dictation started."""
-        try:
-            sample_rate = 22050
-            n = int(sample_rate * 0.07)
-            t = np.linspace(0, 0.07, n, False)
-            tone = np.sin(1200 * 2 * np.pi * t) * 0.3
-            fade = int(sample_rate * 0.01)
-            tone[:fade] *= np.linspace(0, 1, fade)
-            tone[-fade:] *= np.linspace(1, 0, fade)
-            gap = np.zeros(int(sample_rate * 0.06))
-            sd.play(np.concatenate([tone, gap, tone]).astype(np.float32), sample_rate, blocking=False)
+            parts = [np.zeros(int(sample_rate * BEEP_LEAD_S))]
+            for i, (frequency, duration) in enumerate(tones):
+                if i:
+                    parts.append(np.zeros(int(sample_rate * 0.06)))
+                t = np.linspace(0, duration, int(sample_rate * duration), False)
+                tone = np.sin(frequency * 2 * np.pi * t) * 0.3
+                # Fade in/out to avoid clicks
+                fade = int(sample_rate * 0.01)
+                tone[:fade] *= np.linspace(0, 1, fade)
+                tone[-fade:] *= np.linspace(1, 0, fade)
+                parts.append(tone)
+            sd.play(np.concatenate(parts).astype(np.float32), sample_rate,
+                    blocking=False, latency="high")
         except Exception as e:
             print(f"[whisper-dictate] Beep failed: {e}")
 
+    def beep_start(self):
+        """Beep for recording start (higher tone)."""
+        self._play_beep((1200, 0.08))
+
+    def beep_double(self):
+        """Two quick high beeps: live dictation started."""
+        self._play_beep((1200, 0.07), (1200, 0.07))
+
     def beep_stop(self):
         """Beep for recording stop (lower tone)."""
-        self.beep(frequency=800, duration=0.08)
+        self._play_beep((800, 0.08))
     
     def notify(self, message):
         """Show notification."""
