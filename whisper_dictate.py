@@ -51,6 +51,7 @@ from text_fixes import (DEFAULT_SHELL_ALIASES, DEFAULT_SHELL_COMMANDS, DEFAULT_S
                         fix_slash_command, fix_ticket_keys, lower_case, manual_punctuation)
 from live_controller import LiveController, select_transcribers
 from teams_call_watcher import TeamsCallWatcher
+from desktop import GnomeWaylandDesktop, get_desktop
 from live_output import WezTermTarget, KeyboardTarget, choose_target, clipboard_key, is_terminal, press_key
 from live_segmenter import LiveSegmenter, SilenceGate
 from live_session import Edit, LiveSession, is_slash_command, normalise
@@ -64,7 +65,6 @@ except ImportError:
 
 import gi
 gi.require_version('Gtk', '3.0')
-gi.require_version('Keybinder', '3.0')
 try:
     gi.require_version('AppIndicator3', '0.1')
     from gi.repository import AppIndicator3 as appindicator
@@ -72,7 +72,7 @@ try:
 except:
     HAS_APPINDICATOR = False
 
-from gi.repository import Gtk, Gdk, GLib, Keybinder, GdkPixbuf
+from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 
 import tempfile
 import shutil
@@ -192,6 +192,7 @@ def hotkey_action(live_active, live_busy, recording):
 
 class WhisperDictate:
     def __init__(self):
+        self.desktop = get_desktop()
         self.config = self.load_config()
         self.model = None
         self.processor = None
@@ -576,14 +577,10 @@ class WhisperDictate:
     def get_focused_window(self):
         """Get currently focused window ID."""
         try:
-            result = subprocess.run(
-                ["xdotool", "getactivewindow"],
-                capture_output=True, text=True, check=True
-            )
-            return result.stdout.strip()
-        except:
+            return self.desktop.active_window()
+        except Exception:
             return None
-    
+
     def restore_focus(self, window_id):
         """Restore focus to a window, but only if focus actually moved away.
 
@@ -592,13 +589,10 @@ class WhisperDictate:
         """
         if window_id and self.get_focused_window() != window_id:
             try:
-                subprocess.run(
-                    ["xdotool", "windowactivate", window_id],
-                    check=False, capture_output=True
-                )
-            except:
+                self.desktop.activate(window_id)
+            except Exception:
                 pass
-    
+
     def toggle_recording(self, *args):
         """Toggle recording on/off."""
         # Save focused window before any UI changes
@@ -1147,7 +1141,7 @@ class WhisperDictate:
             self.notify("Live dictation is still finishing; try again in a moment.")
             return
         wm_class = self.get_focused_window_class()
-        target = choose_target(wm_class)
+        target = choose_target(wm_class, desktop=self.desktop)
         if target is None:
             window = self.get_focused_window()
             print(f"[whisper-dictate] Live dictation: no target (window={window!r}, "
@@ -1182,7 +1176,7 @@ class WhisperDictate:
             correct = None
         controller = LiveController(
             session, target, fast, correct,
-            make_target=lambda: choose_target(self.get_focused_window_class()),
+            make_target=lambda: choose_target(self.get_focused_window_class(), desktop=self.desktop),
             # Replacements only: the session does case and punctuation from the
             # line. One-shot tidying (lowercase a lone word, drop the final
             # full stop) made fast passes and corrections disagree from the
@@ -1280,20 +1274,9 @@ class WhisperDictate:
         return False
 
     def get_focused_window_class(self):
-        """Return the WM_CLASS of the focused window, or None."""
+        """Return the window class of the focused window, or None."""
         try:
-            wid = subprocess.run(
-                ["xdotool", "getactivewindow"],
-                capture_output=True, text=True, check=True, timeout=1
-            ).stdout.strip()
-            if not wid:
-                return None
-            result = subprocess.run(
-                ["xprop", "-id", wid, "WM_CLASS"],
-                capture_output=True, text=True, check=True, timeout=1
-            )
-            # WM_CLASS(STRING) = "kitty", "kitty"
-            return result.stdout.strip()
+            return self.desktop.window_class()
         except Exception:
             return None
 
@@ -1630,32 +1613,20 @@ class WhisperDictate:
         return False
 
     def _paste_via_clipboard_preserving(self, text):
-        """Save clipboard, paste text via Ctrl+Shift+V, restore clipboard in background."""
-        try:
-            saved = subprocess.run(
-                ["xclip", "-o", "-selection", "clipboard"],
-                capture_output=True, timeout=1
-            ).stdout
-        except Exception:
-            saved = None
-
-        subprocess.run(
-            ["xclip", "-selection", "clipboard"],
-            input=text.encode(), check=False
-        )
+        """Paste text into a terminal with Ctrl+Shift+V, then restore the clipboard."""
+        if isinstance(self.desktop, GnomeWaylandDesktop):
+            # Its type_text serialises overlapping pastes and restores once.
+            self.desktop.type_text(text, terminal=True)
+            return
+        saved = self.desktop.clipboard_get()
+        self.desktop.clipboard_set(text.encode())
         time.sleep(0.05)
-        subprocess.run(
-            ["xdotool", "key", "--clearmodifiers", "ctrl+shift+v"],
-            check=False
-        )
+        self.desktop.key("ctrl+shift+v")
 
         if saved is not None:
             def restore():
                 time.sleep(0.3)
-                subprocess.run(
-                    ["xclip", "-selection", "clipboard"],
-                    input=saved, check=False
-                )
+                self.desktop.clipboard_set(saved)
             threading.Thread(target=restore, daemon=True).start()
 
     def output_text(self, text, line_source=None, press_enter=False):
@@ -1669,8 +1640,10 @@ class WhisperDictate:
             if press is not None:
                 ok = press()
             else:
-                ok = subprocess.run(["xdotool", "key", "--clearmodifiers", "Return"],
-                                    check=False).returncode == 0
+                if isinstance(self.desktop, GnomeWaylandDesktop):
+                    # The hotkey's modifiers may still be held; let them go first.
+                    time.sleep(0.15)
+                ok = bool(self.desktop.key("Return"))
             print(f"[whisper-dictate] one-shot: Enter pressed ({'ok' if ok else 'failed'})")
         self.update_status("Ready")
         return False
@@ -1690,7 +1663,7 @@ class WhisperDictate:
             ok = press(action)
         else:
             key = clipboard_key(action, is_terminal(self.get_focused_window_class()))
-            ok = bool(key) and press_key(key)
+            ok = bool(key) and press_key(key, desktop=self.desktop)
         print(f"[whisper-dictate] one-shot: {action} ({'ok' if ok else 'not done here'})")
         self.update_status("Ready")
         return False
@@ -1773,8 +1746,7 @@ class WhisperDictate:
                     stack.append((achat_target.sock_path, inserted))
                     self._oneshot_undo = stack[-20:]
                 if mode == "both":
-                    subprocess.run(["xclip", "-selection", "clipboard"],
-                                   input=text.encode(), check=False)
+                    self.desktop.clipboard_set(text.encode())
                 self.update_status("Ready")
                 print(f"Transcribed (achat): {text}")
                 return
@@ -1783,30 +1755,21 @@ class WhisperDictate:
         kitty_target = "kitty" in wclass
 
         if mode in ("clipboard", "both"):
-            subprocess.run(
-                ["xclip", "-selection", "clipboard"],
-                input=text.encode(), check=False
-            )
+            self.desktop.clipboard_set(text.encode())
 
         if mode in ("type", "both"):
             time.sleep(0.3)
             if kitty_target:
-                # Kitty drops keys from xdotool type — use remote control or paste.
+                # Kitty drops typed keys — use remote control or paste.
                 if self._kitty_send_text(text):
                     pass
                 elif mode == "both":
                     # Clipboard already holds our text — just paste, no restore.
-                    subprocess.run(
-                        ["xdotool", "key", "--clearmodifiers", "ctrl+shift+v"],
-                        check=False
-                    )
+                    self.desktop.key("ctrl+shift+v")
                 else:
                     self._paste_via_clipboard_preserving(text)
             else:
-                subprocess.run(
-                    ["xdotool", "type", "--clearmodifiers", "--delay", "25", "--", text],
-                    check=False
-                )
+                self.desktop.type_text(text, terminal=is_terminal(wclass))
 
         self.update_status("Ready")
         print(f"Transcribed: {text}")
@@ -2543,10 +2506,30 @@ class WhisperDictate:
         self.stop_remote_monitor()
         Gtk.main_quit()
     
-    def on_hotkey(self, keystring):
+    def on_hotkey(self, keystring=""):
         """Handle global hotkey press."""
         print(f"Hotkey pressed: {keystring}")
         self.toggle_recording()
+
+    def _check_desktop(self):
+        """Warn (and keep running) when the Wayland Shell extension is missing."""
+        if not self.desktop.available():
+            msg = "✗ GNOME extension whisper-dictate not active — run ./install-gnome-extension.sh and log out/in"
+            print(msg)
+            self.notify(msg)
+
+    def _bind_hotkeys(self):
+        hotkey = self.config.get("hotkey", "<Alt>d")
+        if self.desktop.bind_hotkey(hotkey, lambda: self.on_hotkey(hotkey)):
+            print(f"✓ Hotkey {hotkey} registered")
+        else:
+            print(f"✗ Failed to register hotkey {hotkey}")
+        live_hotkey = self.config.get("live_hotkey", "")
+        if live_hotkey:
+            if self.desktop.bind_hotkey(live_hotkey, self.toggle_live):
+                print(f"✓ Live hotkey {live_hotkey} registered")
+            else:
+                print(f"✗ Failed to register live hotkey {live_hotkey}")
     
     def run(self):
         """Run the application."""
@@ -2573,19 +2556,8 @@ class WhisperDictate:
             self.start_remote_monitor()
             threading.Thread(target=self.check_remote_service_once, daemon=True).start()
         
-        # Initialize keybinder
-        Keybinder.init()
-        if Keybinder.bind(hotkey, self.on_hotkey):
-            print(f"✓ Hotkey {hotkey} registered")
-        else:
-            print(f"✗ Failed to register hotkey {hotkey}")
-
-        live_hotkey = self.config.get("live_hotkey", "")
-        if live_hotkey:
-            if Keybinder.bind(live_hotkey, lambda _keystring: self.toggle_live()):
-                print(f"✓ Live hotkey {live_hotkey} registered")
-            else:
-                print(f"✗ Failed to register live hotkey {live_hotkey}")
+        self._check_desktop()
+        self._bind_hotkeys()
 
         self.teams_watcher = None
         if self.config.get("stop_live_on_teams_call", True):
@@ -2617,9 +2589,7 @@ class WhisperDictate:
         Gtk.main()
         
         # Cleanup
-        Keybinder.unbind(hotkey)
-        if live_hotkey:
-            Keybinder.unbind(live_hotkey)
+        self.desktop.unbind_all()
 
 
 def main():

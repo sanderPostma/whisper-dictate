@@ -13,24 +13,25 @@ class RestoreFocusTests(unittest.TestCase):
     def app(self, active):
         app = object.__new__(WhisperDictate)
         app.get_focused_window = lambda: active
+        app.desktop = mock.Mock()
         return app
 
     def test_window_that_still_has_focus_is_left_alone(self):
         # Re-activating it while the hotkey's Alt is held makes Electron
         # apps (Slack, VS Code) open their menu bar.
-        with mock.patch.object(whisper_dictate.subprocess, "run") as run:
-            self.app("42").restore_focus("42")
-        run.assert_not_called()
+        a = self.app("42")
+        a.restore_focus("42")
+        a.desktop.activate.assert_not_called()
 
     def test_focus_that_moved_away_is_restored(self):
-        with mock.patch.object(whisper_dictate.subprocess, "run") as run:
-            self.app("99").restore_focus("42")
-        self.assertEqual(run.call_args[0][0], ["xdotool", "windowactivate", "42"])
+        a = self.app("99")
+        a.restore_focus("42")
+        a.desktop.activate.assert_called_once_with("42")
 
     def test_no_saved_window_does_nothing(self):
-        with mock.patch.object(whisper_dictate.subprocess, "run") as run:
-            self.app("42").restore_focus(None)
-        run.assert_not_called()
+        a = self.app("42")
+        a.restore_focus(None)
+        a.desktop.activate.assert_not_called()
 
 
 if __name__ == "__main__":

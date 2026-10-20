@@ -6,6 +6,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import whisper_dictate
+from desktop import X11Desktop
 from whisper_dictate import WhisperDictate
 
 
@@ -27,6 +28,7 @@ def app(**config):
     a.config = {"output_mode": "type", **config}
     a.get_asr_context = lambda: "Vocabulary: kubectl"
     a.update_status = lambda status: None
+    a.desktop = X11Desktop(lambda *args, **kw: whisper_dictate.subprocess.run(*args, **kw))
     a.get_focused_window_class = lambda: "org.wezfurlong.wezterm"
     return a
 
