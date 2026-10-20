@@ -59,6 +59,14 @@ class X11Tests(unittest.TestCase):
         self.assertEqual(run.calls[0][0], ["xdotool", "type", "--clearmodifiers", "--delay", "25",
                                            "--", "hi"])
 
+    def test_x11_type_text_timeout_scales_with_text(self):
+        run = FakeRun()
+        X11Desktop(run).type_text("x" * 5000, delay_ms=25)
+        self.assertGreater(run.calls[0][1]["timeout"], 5000 * 0.025)
+        run = FakeRun()
+        X11Desktop(run).type_text("hi", delay_ms=25)
+        self.assertGreaterEqual(run.calls[0][1]["timeout"], 10)
+
     def test_x11_activate_and_clipboard_argv(self):
         run = FakeRun({("xclip", "-o"): b"clip"})
         d = X11Desktop(run)

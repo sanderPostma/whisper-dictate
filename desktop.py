@@ -72,7 +72,8 @@ class X11Desktop:
     def type_text(self, text, terminal=False, delay_ms=25):
         try:
             res = self._run(["xdotool", "type", "--clearmodifiers", "--delay", str(delay_ms),
-                             "--", text], capture_output=True, timeout=30)
+                             "--", text], capture_output=True,
+                            timeout=10 + len(text) * delay_ms / 1000 * 2)
             return res.returncode == 0
         except Exception:
             return False
