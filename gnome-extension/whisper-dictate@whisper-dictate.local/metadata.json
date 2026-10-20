@@ -1,0 +1,7 @@
+{
+  "uuid": "whisper-dictate@whisper-dictate.local",
+  "name": "Whisper Dictate helper",
+  "description": "D-Bus helper for whisper-dictate: focused window info, window activation, synthetic key presses and global hotkeys.",
+  "shell-version": ["50"],
+  "version": 1
+}
