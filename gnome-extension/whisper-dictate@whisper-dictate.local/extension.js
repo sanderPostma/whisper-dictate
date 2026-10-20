@@ -87,6 +87,7 @@ function parseChord(chord) {
 export default class WhisperDictateExtension extends Extension {
     enable() {
         this._actions = new Set();
+        this._lastTs = 0;
         this._device = Clutter.get_default_backend()
             .get_default_seat()
             .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
@@ -158,30 +159,21 @@ export default class WhisperDictateExtension extends Extension {
         const dev = this._device;
         const PRESSED = Clutter.KeyState.PRESSED;
         const RELEASED = Clutter.KeyState.RELEASED;
-        const now = () => GLib.get_monotonic_time();
-
-        const sendOnce = () => {
+        // All repeats are sent synchronously, in call order, with strictly
+        // increasing timestamps (REPEAT_GAP_MS apart), so consecutive
+        // PressKeys calls can never interleave.
+        let t = Math.max(GLib.get_monotonic_time(), this._lastTs + 1);
+        const tick = () => t++;
+        for (let i = 0; i < count; i++) {
             for (const m of mods)
-                dev.notify_keyval(now(), m, PRESSED);
-            dev.notify_keyval(now(), key, PRESSED);
-            dev.notify_keyval(now(), key, RELEASED);
+                dev.notify_keyval(tick(), m, PRESSED);
+            dev.notify_keyval(tick(), key, PRESSED);
+            dev.notify_keyval(tick(), key, RELEASED);
             for (const m of [...mods].reverse())
-                dev.notify_keyval(now(), m, RELEASED);
-        };
-
-        // The first chord is sent synchronously; further repeats are spaced
-        // by timeouts so the compositor main loop is never blocked.
-        sendOnce();
-        let remaining = count - 1;
-        if (remaining > 0) {
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, REPEAT_GAP_MS, () => {
-                if (!this._device)
-                    return GLib.SOURCE_REMOVE;
-                sendOnce();
-                remaining--;
-                return remaining > 0 ? GLib.SOURCE_CONTINUE : GLib.SOURCE_REMOVE;
-            });
+                dev.notify_keyval(tick(), m, RELEASED);
+            t += REPEAT_GAP_MS * 1000;
         }
+        this._lastTs = t;
         return true;
     }
 
