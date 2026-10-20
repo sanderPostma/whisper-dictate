@@ -21,10 +21,30 @@ Uses OpenAI Whisper, distil-whisper, or Qwen3-ASR for speech recognition. Qwen3-
 
 ```bash
 # Ubuntu/Debian
-sudo apt install xdotool xclip libportaudio2 python3-gi gir1.2-appindicator3-0.1 gir1.2-keybinder-3.0
+sudo apt install libportaudio2 python3-gi gir1.2-appindicator3-0.1 wl-clipboard
+# X11 sessions additionally need:
+sudo apt install xdotool xclip gir1.2-keybinder-3.0
 ```
 
+### GNOME Wayland
+
+On Wayland (the default on Ubuntu 26), hotkeys, key presses and focused-window
+detection go through a small GNOME Shell extension shipped in `gnome-extension/`:
+
+```bash
+./install-gnome-extension.sh
+# then log out and back in — Wayland cannot reload gnome-shell in place
+```
+
+Text is inserted by putting it on the clipboard and pressing the paste key
+(Ctrl+Shift+V in terminals); your previous clipboard is restored afterwards.
+The session type is picked from `XDG_SESSION_TYPE`; X11 keeps using xdotool.
+
 ### Install
+
+After a distro upgrade that changes the Python version (e.g. Ubuntu 24 → 26,
+Python 3.12 → 3.14) the venv breaks (`No module named 'sounddevice'`);
+delete `venv/` and recreate it with the steps below.
 
 ```bash
 # Clone the repo
@@ -291,7 +311,8 @@ cp ~/.local/share/applications/whisper-dictate.desktop ~/.config/autostart/
 - Test recording: `rec test.wav`
 
 ### Hotkey not working
-- Ensure you're on X11 (not Wayland)
+- Wayland: check the extension is active: `gnome-extensions info whisper-dictate@whisper-dictate.local`
+  (the app prints `✗ GNOME extension whisper-dictate not active` at startup if not)
 - Check if another app uses the same hotkey
 
 ### Tray icon not showing
