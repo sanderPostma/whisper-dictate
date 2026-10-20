@@ -65,7 +65,7 @@ class X11Desktop:
             cmd += ["--repeat", str(repeat)]
         cmd.append(chord)
         try:
-            return self._run(cmd, capture_output=True, timeout=5).returncode == 0
+            return self._run(cmd, capture_output=True, timeout=10).returncode == 0
         except Exception:
             return False
 
@@ -122,6 +122,10 @@ class GnomeWaylandDesktop:
         self._spawn = spawn
         self._actions = {}
         self._sub = None
+        self._lock = threading.Lock()
+        self._saved = None
+        self._has_saved = False
+        self._gen = 0
 
     @staticmethod
     def _dbus_call(method, args=None):
@@ -174,20 +178,31 @@ class GnomeWaylandDesktop:
         return res.stdout if res.returncode == 0 else None
 
     def type_text(self, text, terminal=False, delay_ms=25):
-        saved = self.clipboard_get()
-        self.clipboard_set(text.encode("utf-8"))
-        self._sleep(0.05)
-        ok = self.key("ctrl+shift+v" if terminal else "ctrl+v")
+        # Serialised; the user's clipboard is saved once across overlapping sends and
+        # restored once, 0.3s after the LAST paste.
+        with self._lock:
+            if not self._has_saved:
+                self._saved = self.clipboard_get()
+                self._has_saved = True
+            self._gen += 1
+            gen = self._gen
+            self.clipboard_set(text.encode("utf-8"))
+            self._sleep(0.05)
+            ok = self.key("ctrl+shift+v" if terminal else "ctrl+v")
 
         def restore():
             self._sleep(0.3)
-            if saved:
-                self.clipboard_set(saved)
-            else:
-                try:
-                    self._run(["wl-copy", "--clear"], check=False)
-                except Exception:
-                    pass
+            with self._lock:
+                if gen != self._gen:
+                    return
+                saved, self._saved, self._has_saved = self._saved, None, False
+                if saved:
+                    self.clipboard_set(saved)
+                else:
+                    try:
+                        self._run(["wl-copy", "--clear"], check=False)
+                    except Exception:
+                        pass
         self._spawn(restore)
         return ok
 

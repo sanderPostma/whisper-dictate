@@ -18,7 +18,6 @@ from live_session import Edit
 
 LIST_CLIENTS = ("wezterm", "cli", "list-clients")
 LIST_PANES = ("wezterm", "cli", "list")
-ACTIVE_WINDOW = ("xdotool", "getactivewindow")
 
 
 class FakeRun:

@@ -11,9 +11,6 @@ from live_output import (WezTermTarget, KeyboardTarget, choose_target, wezterm_f
 from live_session import Edit
 
 LIST_CLIENTS = ("wezterm", "cli", "list-clients")
-ACTIVE_WINDOW = ("xdotool", "getactivewindow")
-
-
 class FakeDesktop:
     """Records key/type_text calls; active_window scripted."""
 
@@ -76,17 +73,17 @@ class WezTermTests(unittest.TestCase):
 
     def test_send_backspaces_and_insert_via_stdin(self):
         run = FakeRun()
-        self.assertTrue(WezTermTarget(7, "42", run).send(Edit(3, "abc")))
+        self.assertTrue(WezTermTarget(7, "42", run, desktop=FakeDesktop("42")).send(Edit(3, "abc")))
         cmd, kwargs = run.calls[0]
         self.assertEqual(cmd, ["wezterm", "cli", "send-text", "--pane-id", "7", "--no-paste"])
         self.assertEqual(kwargs["input"], b"\x7f\x7f\x7fabc")
 
     def test_send_failure_returns_false(self):
-        self.assertFalse(WezTermTarget(7, "42", FakeRun(returncode=1)).send(Edit(0, "x")))
+        self.assertFalse(WezTermTarget(7, "42", FakeRun(returncode=1), desktop=FakeDesktop("42")).send(Edit(0, "x")))
 
     def test_empty_edit_runs_nothing(self):
         run = FakeRun()
-        self.assertTrue(WezTermTarget(7, "42", run).send(Edit(0, "")))
+        self.assertTrue(WezTermTarget(7, "42", run, desktop=FakeDesktop("42")).send(Edit(0, "")))
         self.assertEqual(run.calls, [])
 
     def test_still_focused_needs_same_pane_and_window(self):
@@ -109,7 +106,6 @@ def screen(row, cursor_x, pane=7, cursor_y=39):
         LIST_PANES: json.dumps([{"pane_id": pane, "cursor_x": cursor_x, "cursor_y": cursor_y}]),
         GET_TEXT: row + "\n",
         LIST_CLIENTS: clients((pane, 0)),
-        ACTIVE_WINDOW: "42\n",
     })
 
 
@@ -146,7 +142,7 @@ class WezTermLineContextTests(unittest.TestCase):
         self.assertIsNone(wezterm_line_context(8, screen("> hi", 4)))
 
     def test_target_exposes_line_context(self):
-        self.assertEqual(WezTermTarget(7, "42", screen("\u276f fix the", 9)).line_context(),
+        self.assertEqual(WezTermTarget(7, "42", screen("\u276f fix the", 9), desktop=FakeDesktop("42")).line_context(),
                          ("fix the", ""))
 
 

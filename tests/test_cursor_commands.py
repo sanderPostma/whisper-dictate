@@ -9,6 +9,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from live_commands import CursorMove, parse_cursor, word_target
 
 
+class _D:
+    def active_window(self):
+        return "42"
+
+    def key(self, *a, **k):
+        return True
+
+
 class ParseCursorTests(unittest.TestCase):
     def test_back_and_forward_one_word(self):
         self.assertEqual(parse_cursor("Cursor back."), CursorMove("word", -1, 1))
@@ -72,7 +80,7 @@ class TargetMoveTests(unittest.TestCase):
         from live_achat import AchatTarget
         run = Run()
         state = {"ok": True, "rev": 4, "known": True, "text": "fix the brown fox now", "cursor": 21}
-        t = AchatTarget(7, "42", "/x.sock", 4, run=run, request=lambda s, p: state,
+        t = AchatTarget(7, "42", "/x.sock", 4, run=run, desktop=_D(), request=lambda s, p: state,
                         sleep=lambda s: None, log=lambda *_: None)
         self.assertTrue(t.move_cursor(CursorMove("word", -1, 3)))
         cmd, kwargs = run.calls[-1]
@@ -82,7 +90,7 @@ class TargetMoveTests(unittest.TestCase):
     def test_achat_unknown_draft_moves_with_readline_keys(self):
         from live_achat import AchatTarget
         run = Run()
-        t = AchatTarget(7, "42", "/x.sock", 4, run=run,
+        t = AchatTarget(7, "42", "/x.sock", 4, run=run, desktop=_D(),
                         request=lambda s, p: {"ok": True, "rev": 4, "known": False, "text": "", "cursor": 0},
                         sleep=lambda s: None, log=lambda *_: None)
         # An Unknown (multi-line) draft: readline keys on the pane, like plain WezTerm.
@@ -92,9 +100,9 @@ class TargetMoveTests(unittest.TestCase):
     def test_wezterm_uses_readline_keys(self):
         from live_output import WezTermTarget
         run = Run()
-        WezTermTarget(7, "42", run).move_cursor(CursorMove("word", 1, 2))
+        WezTermTarget(7, "42", run, desktop=_D()).move_cursor(CursorMove("word", 1, 2))
         self.assertEqual(run.calls[-1][1]["input"], b"\x1bf\x1bf")
-        WezTermTarget(7, "42", run).move_cursor(CursorMove("start"))
+        WezTermTarget(7, "42", run, desktop=_D()).move_cursor(CursorMove("start"))
         self.assertEqual(run.calls[-1][1]["input"], b"\x01")
 
     def test_xdotool_uses_editor_keys(self):
@@ -123,7 +131,7 @@ class ClearLineTests(unittest.TestCase):
                 return states.pop(0)
             return {"ok": True, "rev": 22}
 
-        t = AchatTarget(7, "42", "/x.sock", 4, run=run, request=request,
+        t = AchatTarget(7, "42", "/x.sock", 4, run=run, desktop=_D(), request=request,
                         sleep=lambda s: None, log=lambda *_: None)
         self.assertTrue(t.clear_line())
         self.assertEqual(run.calls[-1][1]["input"], b"\x1b[C" * 7)
@@ -133,7 +141,7 @@ class ClearLineTests(unittest.TestCase):
     def test_achat_unknown_draft_clears_with_readline_keys(self):
         from live_achat import AchatTarget
         run = Run()
-        t = AchatTarget(7, "42", "/x.sock", 4, run=run,
+        t = AchatTarget(7, "42", "/x.sock", 4, run=run, desktop=_D(),
                         request=lambda s, p: {"ok": True, "rev": 4, "known": False, "text": "", "cursor": 0},
                         sleep=lambda s: None, log=lambda *_: None)
         self.assertTrue(t.clear_line())
@@ -142,7 +150,7 @@ class ClearLineTests(unittest.TestCase):
     def test_wezterm_end_then_kill_to_start(self):
         from live_output import WezTermTarget
         run = Run()
-        WezTermTarget(7, "42", run).clear_line()
+        WezTermTarget(7, "42", run, desktop=_D()).clear_line()
         self.assertEqual(run.calls[-1][1]["input"], b"\x05\x15")
 
     def test_xdotool_has_no_clear(self):

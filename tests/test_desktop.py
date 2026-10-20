@@ -120,6 +120,32 @@ class WaylandTests(unittest.TestCase):
         copies = [k["input"] for c, k in run.calls if c == ["wl-copy"]]
         self.assertEqual(copies[0], "日本 🎤".encode("utf-8"))
 
+    def test_rapid_type_text_keeps_user_clipboard_and_restores_once(self):
+        pending = []
+        run = FakeRun({("wl-paste",): b"mine"})
+        d = GnomeWaylandDesktop(call=FakeCall(), run=run, sleep=lambda s: None,
+                                spawn=pending.append)
+        d.type_text("A")
+        # the clipboard now holds A's text; B must not take that for the user's
+        run.answers[("wl-paste",)] = b"A"
+        d.type_text("B")
+        self.assertEqual(len(pending), 2)
+        for fn in pending:
+            fn()
+        copies = [k["input"] for c, k in run.calls if c == ["wl-copy"]]
+        self.assertEqual(copies, [b"A", b"B", b"mine"])
+        self.assertEqual(len([c for c, _ in run.calls if c[0] == "wl-paste"]), 1)
+
+    def test_second_paste_comes_before_any_restore(self):
+        pending = []
+        d, call, run = self.make(run=FakeRun({("wl-paste",): b"mine"}))
+        d._spawn = pending.append
+        d.type_text("A")
+        d.type_text("B")
+        order = [("copy", k["input"]) for c, k in run.calls if c == ["wl-copy"]]
+        self.assertEqual(order, [("copy", b"A"), ("copy", b"B")])
+        self.assertEqual(len(call.calls), 2)
+
     def test_wayland_without_extension_reports_unavailable(self):
         d, _, _ = self.make(FakeCall(error=True))
         self.assertFalse(d.available())
