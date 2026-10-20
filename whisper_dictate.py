@@ -17,6 +17,7 @@ import json
 import os
 import queue
 import re
+import signal
 import socket
 import struct
 import subprocess
@@ -1640,9 +1641,6 @@ class WhisperDictate:
             if press is not None:
                 ok = press()
             else:
-                if isinstance(self.desktop, GnomeWaylandDesktop):
-                    # The hotkey's modifiers may still be held; let them go first.
-                    time.sleep(0.15)
                 ok = bool(self.desktop.key("Return"))
             print(f"[whisper-dictate] one-shot: Enter pressed ({'ok' if ok else 'failed'})")
         self.update_status("Ready")
@@ -2586,10 +2584,19 @@ class WhisperDictate:
         print(f"✓ Started")
         
         # Run GTK main loop
-        Gtk.main()
-        
-        # Cleanup
-        self.desktop.unbind_all()
+        # SIGINT/SIGTERM leave the main loop normally so the hotkey grabs are
+        # released (a stale grab would make the next start's grab fail).
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, self._on_terminate_signal)
+        try:
+            Gtk.main()
+        finally:
+            self.desktop.unbind_all()
+
+    @staticmethod
+    def _on_terminate_signal():
+        Gtk.main_quit()
+        return GLib.SOURCE_REMOVE
 
 
 def main():

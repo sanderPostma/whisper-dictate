@@ -77,14 +77,14 @@ class DesktopPortTests(unittest.TestCase):
         d.bound["<Alt>l"]()
         a.toggle_live.assert_called_once()
 
-    def test_wayland_hotkey_output_waits_for_modifier_release(self):
+    def test_wayland_enter_leaves_modifier_wait_to_the_desktop(self):
         d = FakeWayland()
         a = app(d)
         with mock.patch.object(whisper_dictate.time, "sleep",
                                side_effect=lambda s: d.events.append(("sleep", s))), \
                 mock.patch("builtins.print"):
             a.output_text("", press_enter=True)
-        self.assertEqual(d.events, [("sleep", 0.15), ("key", "Return")])
+        self.assertEqual(d.events, [("key", "Return")])
 
     def test_missing_extension_warns_and_keeps_running(self):
         a = app(FakeDesktop(available=False))

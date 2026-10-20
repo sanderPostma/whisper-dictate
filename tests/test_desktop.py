@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -144,15 +145,159 @@ class WaylandTests(unittest.TestCase):
         self.assertEqual(copies, [b"A", b"B", b"mine"])
         self.assertEqual(len([c for c, _ in run.calls if c[0] == "wl-paste"]), 1)
 
-    def test_second_paste_comes_before_any_restore(self):
+    def test_stale_restore_is_noop_when_run_during_next_paste(self):
         pending = []
-        d, call, run = self.make(run=FakeRun({("wl-paste",): b"mine"}))
+        run = FakeRun({("wl-paste",): b"mine"})
+        d, call, _ = self.make(run=run)
         d._spawn = pending.append
+        original = d.clipboard_set
+        fired = []
+
+        def hooked(data):
+            if data == b"B" and not fired:
+                fired.append(True)
+                pending[0]()  # A's restore, mid-way through B's paste
+            return original(data)
+        d.clipboard_set = hooked
         d.type_text("A")
         d.type_text("B")
-        order = [("copy", k["input"]) for c, k in run.calls if c == ["wl-copy"]]
-        self.assertEqual(order, [("copy", b"A"), ("copy", b"B")])
+        copies = [k["input"] for c, k in run.calls if c == ["wl-copy"]]
+        self.assertEqual(copies, [b"A", b"B"])
+        self.assertFalse([c for c, _ in run.calls if c == ["wl-copy", "--clear"]])
         self.assertEqual(len(call.calls), 2)
+
+    def test_paste_settles_before_following_key_or_type_text(self):
+        log = []
+
+        class LogCall(FakeCall):
+            def __call__(self, method, args=None):
+                log.append(("dbus", method, args))
+                return super().__call__(method, args)
+
+        class LogRun(FakeRun):
+            def __call__(self, cmd, **kw):
+                if cmd == ["wl-copy"]:
+                    log.append(("copy", kw["input"]))
+                return super().__call__(cmd, **kw)
+        d = GnomeWaylandDesktop(call=LogCall(), run=LogRun(), sleep=lambda s: log.append(("sleep", s)),
+                                spawn=lambda fn: None)
+        self.assertEqual(d.paste_settle_s, 0.12)
+        d.type_text("A")
+        d.key("BackSpace")
+        d.type_text("B")
+        i = log.index(("dbus", "PressKeys", ("ctrl+v", 1)))
+        self.assertEqual(log[i + 1], ("sleep", 0.12))
+        self.assertEqual(log[i + 2], ("dbus", "PressKeys", ("BackSpace", 1)))
+        j = log.index(("copy", b"B"))
+        self.assertGreater(j, i + 2)
+
+    def test_key_waits_for_a_paste_in_progress(self):
+        import threading
+        d, call, _ = self.make()
+        seen = {}
+        t = []
+
+        def sleep(s):
+            if s == 0.12 and not t:
+                th = threading.Thread(target=lambda: d.key("BackSpace"))
+                t.append(th)
+                th.start()
+                th.join(0.3)
+                seen["blocked"] = th.is_alive()
+        d._sleep = sleep
+        d.type_text("A")
+        t[0].join(2)
+        self.assertTrue(seen["blocked"])
+        self.assertEqual([c for c in call.calls if c[0] == "PressKeys"],
+                         [("PressKeys", ("ctrl+v", 1)), ("PressKeys", ("BackSpace", 1))])
+
+    def test_hotkey_then_first_key_waits_for_modifier_release(self):
+        sleeps, t = [], [100.0]
+        d = GnomeWaylandDesktop(call=FakeCall({"GrabAccelerator": (5,)}), run=FakeRun(),
+                                sleep=lambda s: sleeps.append(s), spawn=now, clock=lambda: t[0])
+        d._sub = object()
+        fired = []
+        self.assertTrue(d.bind_hotkey("<Alt>d", lambda: fired.append(1)))
+        d._actions[5]()
+        self.assertEqual(fired, [1])
+        t[0] += 0.05
+        d.key("Return")
+        self.assertEqual(len(sleeps), 1)
+        self.assertAlmostEqual(sleeps[0], 0.10)
+        d.key("Return")  # consumed
+        self.assertEqual(len(sleeps), 1)
+
+    def test_no_modifier_wait_long_after_hotkey_or_without_one(self):
+        sleeps, t = [], [100.0]
+        d = GnomeWaylandDesktop(call=FakeCall({"GrabAccelerator": (5,)}), run=FakeRun(),
+                                sleep=lambda s: sleeps.append(s), spawn=now, clock=lambda: t[0])
+        d._sub = object()
+        d.key("a")
+        d.bind_hotkey("<Alt>d", lambda: None)
+        d._actions[5]()
+        t[0] += 5
+        d.key("a")
+        self.assertEqual(sleeps, [])
+
+    def test_type_text_after_hotkey_waits_for_modifier_release(self):
+        sleeps, t = [], [100.0]
+        d = GnomeWaylandDesktop(call=FakeCall({"GrabAccelerator": (5,)}), run=FakeRun(),
+                                sleep=lambda s: sleeps.append(s), spawn=now, clock=lambda: t[0])
+        d._sub = object()
+        d.bind_hotkey("<Alt>d", lambda: None)
+        d._actions[5]()
+        d.type_text("x")
+        self.assertAlmostEqual(sleeps[0], 0.15)
+
+    def test_clipboard_set_failure_skips_paste(self):
+        d, call, run = self.make(run=FakeRun({("wl-copy",): 1}))
+        self.assertFalse(d.type_text("x"))
+        self.assertEqual([c for c in call.calls if c[0] == "PressKeys"], [])
+
+    def test_clipboard_read_failure_skips_restore(self):
+        def boom(cmd, **kw):
+            if cmd[0] == "wl-paste":
+                raise subprocess.TimeoutExpired(cmd, 1)
+            return run(cmd, **kw)
+        run = FakeRun()
+        d = GnomeWaylandDesktop(call=FakeCall(), run=boom, sleep=lambda s: None, spawn=now)
+        d.type_text("x")
+        cmds = [c for c, _ in run.calls]
+        self.assertEqual(cmds, [["wl-copy"]])
+
+    def test_clipboard_read_error_exit_skips_restore(self):
+        class R(FakeRun):
+            def __call__(self, cmd, **kw):
+                r = super().__call__(cmd, **kw)
+                if cmd[0] == "wl-paste":
+                    r.stderr = b"Failed to connect to a Wayland server"
+                return r
+        run = R({("wl-paste",): 1})
+        d = GnomeWaylandDesktop(call=FakeCall(), run=run, sleep=lambda s: None, spawn=now)
+        d.type_text("x")
+        self.assertEqual([c for c, _ in run.calls if c == ["wl-copy", "--clear"]], [])
+
+    def test_empty_clipboard_with_no_selection_message_is_cleared(self):
+        class R(FakeRun):
+            def __call__(self, cmd, **kw):
+                r = super().__call__(cmd, **kw)
+                if cmd[0] == "wl-paste":
+                    r.stderr = b"No selection"
+                return r
+        run = R({("wl-paste",): 1})
+        d = GnomeWaylandDesktop(call=FakeCall(), run=run, sleep=lambda s: None, spawn=now)
+        d.type_text("x")
+        self.assertEqual(run.calls[-1][0], ["wl-copy", "--clear"])
+
+    def test_wl_copy_calls_have_timeout(self):
+        d, _, run = self.make(run=FakeRun({("wl-paste",): b"old"}))
+        d.type_text("x")
+        d2, _, run2 = self.make(run=FakeRun({("wl-paste",): 1}))
+        d2.type_text("x")
+        for r in (run, run2):
+            for c, k in r.calls:
+                if c[0] == "wl-copy":
+                    self.assertEqual(k.get("timeout"), 2, c)
 
     def test_wayland_without_extension_reports_unavailable(self):
         d, _, _ = self.make(FakeCall(error=True))

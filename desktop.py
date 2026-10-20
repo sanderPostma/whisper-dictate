@@ -116,17 +116,25 @@ class X11Desktop:
 
 
 class GnomeWaylandDesktop:
-    def __init__(self, call=None, run=subprocess.run, sleep=time.sleep, spawn=_thread_spawn):
+    paste_settle_s = 0.12      # let the focused app consume ctrl+v before touching the clipboard
+    modifier_release_s = 0.15  # hotkey modifiers may still be physically held
+    modifier_window_s = 1.0
+
+    def __init__(self, call=None, run=subprocess.run, sleep=time.sleep, spawn=_thread_spawn,
+                 clock=time.monotonic):
         self._call = call or self._dbus_call
         self._run = run
         self._sleep = sleep
         self._spawn = spawn
+        self._clock = clock
         self._actions = {}
         self._sub = None
-        self._lock = threading.Lock()
+        # Re-entrant: type_text holds it across its own key() call.
+        self._lock = threading.RLock()
         self._saved = None
-        self._has_saved = False
+        self._saved_state = None  # None (nothing saved) | "ok" | "empty" | "failed"
         self._gen = 0
+        self._hotkey_fired_at = None
 
     @staticmethod
     def _dbus_call(method, args=None):
@@ -161,47 +169,76 @@ class GnomeWaylandDesktop:
         res = self._try("ActivateWindow", (window_id,))
         return bool(res and res[0])
 
+    def _wait_modifier_release(self):
+        fired, self._hotkey_fired_at = self._hotkey_fired_at, None
+        if fired is None:
+            return
+        elapsed = self._clock() - fired
+        if 0 <= elapsed < self.modifier_window_s and elapsed < self.modifier_release_s:
+            self._sleep(self.modifier_release_s - elapsed)
+
     def key(self, chord, repeat=1, delay_ms=None):
-        res = self._try("PressKeys", (chord, repeat))
+        with self._lock:
+            self._wait_modifier_release()
+            res = self._try("PressKeys", (chord, repeat))
         return bool(res and res[0])
 
     def clipboard_set(self, data):
         try:
-            return self._run(["wl-copy"], input=data, check=False).returncode == 0
+            return self._run(["wl-copy"], input=data, check=False, timeout=2).returncode == 0
         except Exception:
             return False
 
-    def clipboard_get(self):
+    def _read_clipboard(self):
+        """(state, data): state is "ok", "empty" (nothing selected) or "failed"."""
         try:
             res = self._run(["wl-paste", "--no-newline"], capture_output=True, timeout=1)
         except Exception:
-            return None
-        return res.stdout if res.returncode == 0 else None
+            return "failed", None
+        if res.returncode == 0:
+            return "ok", res.stdout
+        err = (getattr(res, "stderr", b"") or b"")
+        if isinstance(err, str):
+            err = err.encode()
+        err = err.lower()
+        if not err.strip() or b"no selection" in err or b"nothing is copied" in err:
+            return "empty", None
+        return "failed", None
+
+    def clipboard_get(self):
+        state, data = self._read_clipboard()
+        return data if state == "ok" else None
 
     def type_text(self, text, terminal=False, delay_ms=25):
         # Serialised; the user's clipboard is saved once across overlapping sends and
         # restored once, 0.3s after the LAST paste.
         with self._lock:
-            if not self._has_saved:
-                self._saved = self.clipboard_get()
-                self._has_saved = True
+            self._wait_modifier_release()
+            if self._saved_state is None:
+                self._saved_state, self._saved = self._read_clipboard()
             self._gen += 1
             gen = self._gen
-            self.clipboard_set(text.encode("utf-8"))
-            self._sleep(0.05)
-            ok = self.key("ctrl+shift+v" if terminal else "ctrl+v")
+            if self.clipboard_set(text.encode("utf-8")):
+                self._sleep(0.05)
+                ok = self.key("ctrl+shift+v" if terminal else "ctrl+v")
+                self._sleep(self.paste_settle_s)
+            else:
+                ok = False
 
         def restore():
             self._sleep(0.3)
             with self._lock:
                 if gen != self._gen:
                     return
-                saved, self._saved, self._has_saved = self._saved, None, False
-                if saved:
+                state, saved = self._saved_state, self._saved
+                self._saved, self._saved_state = None, None
+                if state == "failed":
+                    return
+                if state == "ok" and saved:
                     self.clipboard_set(saved)
                 else:
                     try:
-                        self._run(["wl-copy", "--clear"], check=False)
+                        self._run(["wl-copy", "--clear"], check=False, timeout=2)
                     except Exception:
                         pass
         self._spawn(restore)
@@ -212,7 +249,10 @@ class GnomeWaylandDesktop:
         action = res[0] if res else 0
         if not action:
             return False
-        self._actions[action] = callback
+        def dispatch(cb=callback):
+            self._hotkey_fired_at = self._clock()
+            return cb()
+        self._actions[action] = dispatch
         if self._sub is None:
             try:
                 bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)

@@ -86,7 +86,9 @@ function parseChord(chord) {
 
 export default class WhisperDictateExtension extends Extension {
     enable() {
-        this._actions = new Set();
+        // action id -> {sender, accel}; watchers: sender -> bus name watch id
+        this._grabs = new Map();
+        this._watchers = new Map();
         this._lastTs = 0;
         this._device = Clutter.get_default_backend()
             .get_default_seat()
@@ -94,7 +96,7 @@ export default class WhisperDictateExtension extends Extension {
 
         this._acceleratorId = global.display.connect(
             'accelerator-activated', (_display, action) => {
-                if (this._actions.has(action)) {
+                if (this._grabs.has(action)) {
                     this._dbus?.emit_signal('AcceleratorActivated',
                         new GLib.Variant('(u)', [action]));
                 }
@@ -109,15 +111,19 @@ export default class WhisperDictateExtension extends Extension {
             global.display.disconnect(this._acceleratorId);
             this._acceleratorId = 0;
         }
-        for (const action of this._actions ?? []) {
+        for (const id of this._watchers?.values() ?? [])
+            Gio.bus_unwatch_name(id);
+        this._watchers?.clear();
+        this._watchers = null;
+        for (const action of this._grabs?.keys() ?? []) {
             try {
                 global.display.ungrab_accelerator(action);
             } catch (e) {
                 console.error(`whisper-dictate: ungrab failed: ${e}`);
             }
         }
-        this._actions?.clear();
-        this._actions = null;
+        this._grabs?.clear();
+        this._grabs = null;
         if (this._dbus) {
             this._dbus.unexport();
             this._dbus = null;
@@ -177,22 +183,66 @@ export default class WhisperDictateExtension extends Extension {
         return true;
     }
 
-    GrabAccelerator(accel) {
-        const action = global.display.grab_accelerator(
-            accel, Meta.KeyBindingFlags.NONE);
-        if (!action)
-            return 0;
-        Main.wm.allowKeybinding(
-            Meta.external_binding_name_for_action(action), Shell.ActionMode.ALL);
-        this._actions.add(action);
-        return action;
+    _ungrabAction(action) {
+        this._grabs.delete(action);
+        try {
+            return global.display.ungrab_accelerator(action);
+        } catch (e) {
+            console.error(`whisper-dictate: ungrab failed: ${e}`);
+            return false;
+        }
+    }
+
+    _releaseSender(sender) {
+        const id = this._watchers?.get(sender);
+        if (id !== undefined) {
+            this._watchers.delete(sender);
+            Gio.bus_unwatch_name(id);
+        }
+        if (!this._grabs)
+            return;
+        for (const [action, grab] of [...this._grabs]) {
+            if (grab.sender === sender)
+                this._ungrabAction(action);
+        }
+    }
+
+    // Grabs are owned by the D-Bus client that made them: when it vanishes
+    // (crash, kill -9) its grabs are released, so a restarted client can grab
+    // the same accelerator again. Mutter refuses an accelerator that is
+    // already grabbed, so a repeat request drops the old grab first.
+    GrabAcceleratorAsync(params, invocation) {
+        const [accel] = params;
+        const sender = invocation.get_sender();
+        let action = 0;
+        try {
+            for (const [old, grab] of [...this._grabs]) {
+                if (grab.accel === accel)
+                    this._ungrabAction(old);
+            }
+            action = global.display.grab_accelerator(
+                accel, Meta.KeyBindingFlags.NONE);
+            if (action) {
+                Main.wm.allowKeybinding(
+                    Meta.external_binding_name_for_action(action), Shell.ActionMode.ALL);
+                this._grabs.set(action, {sender, accel});
+                if (!this._watchers.has(sender)) {
+                    this._watchers.set(sender, Gio.bus_watch_name_on_connection(
+                        Gio.DBus.session, sender, Gio.BusNameWatcherFlags.NONE,
+                        null, () => this._releaseSender(sender)));
+                }
+            }
+        } catch (e) {
+            console.error(`whisper-dictate: grab failed: ${e}`);
+            action = 0;
+        }
+        invocation.return_value(new GLib.Variant('(u)', [action]));
     }
 
     UngrabAccelerator(action) {
-        if (!this._actions.has(action))
+        if (!this._grabs.has(action))
             return false;
-        this._actions.delete(action);
-        return global.display.ungrab_accelerator(action);
+        return this._ungrabAction(action);
     }
 
     Version() {
