@@ -51,7 +51,7 @@ from text_fixes import (DEFAULT_SHELL_ALIASES, DEFAULT_SHELL_COMMANDS, DEFAULT_S
                         fix_slash_command, fix_ticket_keys, lower_case, manual_punctuation)
 from live_controller import LiveController, select_transcribers
 from teams_call_watcher import TeamsCallWatcher
-from live_output import WezTermTarget, XdotoolTarget, choose_target, clipboard_key, is_terminal, press_key
+from live_output import WezTermTarget, KeyboardTarget, choose_target, clipboard_key, is_terminal, press_key
 from live_segmenter import LiveSegmenter, SilenceGate
 from live_session import Edit, LiveSession, is_slash_command, normalise
 
@@ -1730,7 +1730,7 @@ class WhisperDictate:
 
     def _oneshot_move(self, line_source, move):
         """A spoken cursor move instead of text."""
-        target = line_source if line_source is not None else XdotoolTarget.detect()
+        target = line_source if line_source is not None else KeyboardTarget.detect()
         mover = getattr(target, "move_cursor", None)
         ok = mover(move) if mover is not None else False
         print(f"[whisper-dictate] one-shot: cursor {move} ({'ok' if ok else 'not moved'})")

@@ -9,7 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from live_commands import mentions_command, parse_clipboard
 from live_controller import LiveController
-from live_output import WezTermTarget, XdotoolTarget, choose_target, clipboard_key
+from desktop import X11Desktop
+from live_output import WezTermTarget, KeyboardTarget, choose_target, clipboard_key
 from live_segmenter import ChunkReady
 from live_session import Edit, LiveSession
 
@@ -41,15 +42,16 @@ class ClipboardKeyTests(unittest.TestCase):
 
     def test_targets_press_the_key(self):
         run = mock.Mock(return_value=mock.Mock(returncode=0))
-        self.assertTrue(WezTermTarget(3, "1", run).clipboard("paste"))
+        dsk = X11Desktop(run)
+        self.assertTrue(WezTermTarget(3, "1", run, desktop=dsk).clipboard("paste"))
         self.assertEqual(run.call_args[0][0], ["xdotool", "key", "--clearmodifiers", "ctrl+shift+v"])
-        self.assertTrue(XdotoolTarget("9", run).clipboard("cut"))
+        self.assertTrue(KeyboardTarget("9", dsk).clipboard("cut"))
         self.assertEqual(run.call_args[0][0][-1], "ctrl+x")
-        self.assertFalse(WezTermTarget(3, "1", run).clipboard("cut"))
+        self.assertFalse(WezTermTarget(3, "1", run, desktop=dsk).clipboard("cut"))
 
     def test_xdotool_target_in_another_terminal(self):
         run = mock.Mock(return_value=mock.Mock(returncode=0, stdout="42\n"))
-        target = choose_target("gnome-terminal-server.Gnome-terminal", run)
+        target = choose_target("gnome-terminal-server.Gnome-terminal", run, desktop=X11Desktop(run))
         self.assertTrue(target.terminal)
         self.assertEqual(clipboard_key("copy", target.terminal), "ctrl+shift+c")
 

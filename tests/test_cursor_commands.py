@@ -98,11 +98,12 @@ class TargetMoveTests(unittest.TestCase):
         self.assertEqual(run.calls[-1][1]["input"], b"\x01")
 
     def test_xdotool_uses_editor_keys(self):
-        from live_output import XdotoolTarget
+        from desktop import X11Desktop
+        from live_output import KeyboardTarget
         run = Run()
-        XdotoolTarget("42", run).move_cursor(CursorMove("word", -1, 3))
+        KeyboardTarget("42", X11Desktop(run)).move_cursor(CursorMove("word", -1, 3))
         self.assertEqual(run.calls[-1][0], ["xdotool", "key", "--clearmodifiers", "--repeat", "3", "ctrl+Left"])
-        XdotoolTarget("42", run).move_cursor(CursorMove("end"))
+        KeyboardTarget("42", X11Desktop(run)).move_cursor(CursorMove("end"))
         self.assertEqual(run.calls[-1][0], ["xdotool", "key", "--clearmodifiers", "End"])
 
 
@@ -145,8 +146,9 @@ class ClearLineTests(unittest.TestCase):
         self.assertEqual(run.calls[-1][1]["input"], b"\x05\x15")
 
     def test_xdotool_has_no_clear(self):
-        from live_output import XdotoolTarget
-        self.assertFalse(hasattr(XdotoolTarget("42", Run()), "clear_line"))
+        from desktop import X11Desktop
+        from live_output import KeyboardTarget
+        self.assertFalse(hasattr(KeyboardTarget("42", X11Desktop(Run())), "clear_line"))
 
 
 if __name__ == "__main__":

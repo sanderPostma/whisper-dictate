@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import time
 
-from live_output import WezTermTarget, wezterm_focused_pane, xdotool_active_window
+from live_output import WezTermTarget, wezterm_focused_pane, active_window
 from live_commands import word_target
 from live_session import Edit, normalise
 
@@ -149,7 +149,9 @@ class AchatTarget:
     recoverable_rejections = True
 
     def __init__(self, pane_id, window_id, sock_path, rev, run=subprocess.run,
-                 request=socket_request, sleep=time.sleep, log=print):
+                 request=socket_request, sleep=time.sleep, log=print, desktop=None):
+        from desktop import get_desktop
+        self._desktop = desktop or get_desktop()
         self.pane_id = int(pane_id)
         self.window_id = str(window_id)
         self.sock_path = sock_path
@@ -160,7 +162,7 @@ class AchatTarget:
         # While achat reports the draft Unknown (a multi-line draft, say), the
         # pane is used like a plain WezTerm pane: keystrokes, screen context.
         self.unknown = False
-        self._screen = WezTermTarget(pane_id, window_id, run)
+        self._screen = WezTermTarget(pane_id, window_id, run, self._desktop)
         self._run = run
         self._request = request
         self._sleep = sleep
@@ -168,8 +170,10 @@ class AchatTarget:
 
     @classmethod
     def detect(cls, run=subprocess.run, input_dir=None, request=socket_request,
-               pid_alive=_pid_alive, **kwargs):
-        window = xdotool_active_window(run)
+               pid_alive=_pid_alive, desktop=None, **kwargs):
+        from desktop import get_desktop
+        desktop = desktop or get_desktop()
+        window = active_window(desktop)
         pane = wezterm_focused_pane(run)
         if window is None or pane is None:
             return None
@@ -186,7 +190,7 @@ class AchatTarget:
         rev = _rev(state.get("rev"))
         if rev is None:
             return None
-        return cls(pane, window, sock, rev, run, request, **kwargs)
+        return cls(pane, window, sock, rev, run, request, desktop=desktop, **kwargs)
 
     def _call(self, payload):
         try:
@@ -399,7 +403,7 @@ class AchatTarget:
     def still_focused(self):
         if self.dead:
             return False
-        if xdotool_active_window(self._run) != self.window_id:
+        if active_window(self._desktop) != self.window_id:
             return False
         return wezterm_focused_pane(self._run) == self.pane_id
 

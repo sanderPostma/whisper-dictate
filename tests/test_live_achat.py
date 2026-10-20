@@ -35,12 +35,24 @@ class FakeRun:
         return SimpleNamespace(returncode=0, stdout=stdout)
 
 
+class FakeDesktop:
+    def __init__(self, window="42"):
+        self.window = window
+
+    def active_window(self):
+        return self.window
+
+
 def desktop(pane=7, tty="/dev/pts/4", window="42"):
+    """The wezterm `run` fake; the window lives in FakeDesktop (see dsk)."""
     return FakeRun({
         LIST_CLIENTS: json.dumps([{"focused_pane_id": pane, "idle_time": {"secs": 0, "nanos": 0}}]),
         LIST_PANES + ("--format",): json.dumps([{"pane_id": pane, "tty_name": tty}]),
-        ACTIVE_WINDOW: window + "\n",
     })
+
+
+def dsk(window="42"):
+    return FakeDesktop(window)
 
 
 class FakeAchat:
@@ -59,7 +71,7 @@ class FakeAchat:
 
 
 def target(achat, rev=10):
-    return AchatTarget(7, "42", "/x.sock", rev, run=desktop(), request=achat,
+    return AchatTarget(7, "42", "/x.sock", rev, run=desktop(), desktop=dsk(), request=achat,
                        sleep=lambda s: None, log=lambda *_: None)
 
 
@@ -116,35 +128,35 @@ class DiscoveryTests(unittest.TestCase):
     def test_detect_reads_rev_from_state(self):
         sock = self.sidecar(100, "/dev/pts/4")
         achat = FakeAchat({"ok": True, "rev": 5, "known": True, "text": "", "cursor": 0})
-        t = AchatTarget.detect(desktop(), input_dir=self.dir, request=achat,
+        t = AchatTarget.detect(desktop(), desktop=dsk(), input_dir=self.dir, request=achat,
                                pid_alive=lambda pid: True)
         self.assertEqual((t.pane_id, t.window_id, t.sock_path, t.rev), (7, "42", sock, 5))
 
     def test_detect_without_session_is_none(self):
-        self.assertIsNone(AchatTarget.detect(desktop(), input_dir=self.dir, request=FakeAchat()))
+        self.assertIsNone(AchatTarget.detect(desktop(), desktop=dsk(), input_dir=self.dir, request=FakeAchat()))
 
     def test_detect_unreachable_socket_is_none(self):
         self.sidecar(100, "/dev/pts/4")
         achat = FakeAchat(ConnectionRefusedError())
-        self.assertIsNone(AchatTarget.detect(desktop(), input_dir=self.dir, request=achat,
+        self.assertIsNone(AchatTarget.detect(desktop(), desktop=dsk(), input_dir=self.dir, request=achat,
                                              pid_alive=lambda pid: True))
 
     def test_detect_returns_none_when_state_has_no_rev(self):
         sock = self.sidecar(100, "/dev/pts/4")
         achat = FakeAchat({"ok": True, "known": True, "text": "", "cursor": 0})
-        self.assertIsNone(AchatTarget.detect(desktop(), input_dir=self.dir, request=achat,
+        self.assertIsNone(AchatTarget.detect(desktop(), desktop=dsk(), input_dir=self.dir, request=achat,
                                              pid_alive=lambda pid: True))
 
     def test_detect_returns_none_when_rev_is_null(self):
         sock = self.sidecar(100, "/dev/pts/4")
         achat = FakeAchat({"ok": True, "rev": None, "known": True, "text": "", "cursor": 0})
-        self.assertIsNone(AchatTarget.detect(desktop(), input_dir=self.dir, request=achat,
+        self.assertIsNone(AchatTarget.detect(desktop(), desktop=dsk(), input_dir=self.dir, request=achat,
                                              pid_alive=lambda pid: True))
 
     def test_detect_returns_none_when_rev_is_bool(self):
         sock = self.sidecar(100, "/dev/pts/4")
         achat = FakeAchat({"ok": True, "rev": True, "known": True, "text": "", "cursor": 0})
-        self.assertIsNone(AchatTarget.detect(desktop(), input_dir=self.dir, request=achat,
+        self.assertIsNone(AchatTarget.detect(desktop(), desktop=dsk(), input_dir=self.dir, request=achat,
                                              pid_alive=lambda pid: True))
 
 
@@ -404,8 +416,7 @@ class UnknownDraftFallbackTests(unittest.TestCase):
             LIST_PANES + ("--format",): json.dumps([{"pane_id": 7, "tty_name": "/dev/pts/4",
                                                     "cursor_x": 11, "cursor_y": 3}]),
             ("wezterm", "cli", "get-text"): "> line one\n",
-            ACTIVE_WINDOW: "42\n",
-        })
+                    })
         self.sent = []
         run = self.run
 
@@ -414,7 +425,7 @@ class UnknownDraftFallbackTests(unittest.TestCase):
                 self.sent.append(kwargs["input"])
             return run(cmd, **kwargs)
 
-        return AchatTarget(7, "42", "/x.sock", 10, run=recording_run, request=FakeAchat(*responses),
+        return AchatTarget(7, "42", "/x.sock", 10, run=recording_run, desktop=dsk(), request=FakeAchat(*responses),
                            sleep=lambda s: None, log=lambda *_: None)
 
     def unknown(self):
@@ -454,16 +465,16 @@ class ChooseTargetTests(unittest.TestCase):
 
     def test_achat_session_is_preferred_in_wezterm(self):
         sentinel = object()
-        self.assertIs(choose_target(self.WEZ, desktop(), achat_detect=lambda run: sentinel), sentinel)
+        self.assertIs(choose_target(self.WEZ, desktop(), achat_detect=lambda run, desktop=None: sentinel, desktop=dsk()), sentinel)
 
     def test_plain_wezterm_pane_without_session(self):
-        t = choose_target(self.WEZ, desktop(), achat_detect=lambda run: None)
+        t = choose_target(self.WEZ, desktop(), achat_detect=lambda run, desktop=None: None, desktop=dsk())
         self.assertIsInstance(t, WezTermTarget)
 
     def test_achat_not_consulted_outside_wezterm(self):
-        def boom(run):
+        def boom(run, desktop=None):
             raise AssertionError("achat detect called")
-        self.assertIsNotNone(choose_target('WM_CLASS(STRING) = "firefox"', desktop(), achat_detect=boom))
+        self.assertIsNotNone(choose_target('WM_CLASS(STRING) = "firefox"', desktop(), achat_detect=boom, desktop=dsk()))
 
 
 class SocketRequestTests(unittest.TestCase):

@@ -6,12 +6,32 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from live_output import (WezTermTarget, XdotoolTarget, choose_target, wezterm_focused_pane,
+from live_output import (WezTermTarget, KeyboardTarget, choose_target, wezterm_focused_pane,
                          wezterm_line_context)
 from live_session import Edit
 
 LIST_CLIENTS = ("wezterm", "cli", "list-clients")
 ACTIVE_WINDOW = ("xdotool", "getactivewindow")
+
+
+class FakeDesktop:
+    """Records key/type_text calls; active_window scripted."""
+
+    def __init__(self, window=None, ok=True):
+        self.window = window
+        self.ok = ok
+        self.calls = []
+
+    def active_window(self):
+        return self.window
+
+    def key(self, chord, repeat=1, delay_ms=None):
+        self.calls.append(("key", chord, repeat, delay_ms))
+        return self.ok
+
+    def type_text(self, text, terminal=False, delay_ms=25):
+        self.calls.append(("type", text, terminal, delay_ms))
+        return self.ok
 
 
 class FakeRun:
@@ -50,8 +70,8 @@ class WezTermTests(unittest.TestCase):
         self.assertIsNone(wezterm_focused_pane(FakeRun({LIST_CLIENTS: clients((7, 0))}, returncode=1)))
 
     def test_detect_pins_pane_and_window(self):
-        run = FakeRun({LIST_CLIENTS: clients((7, 0)), ACTIVE_WINDOW: "42\n"})
-        target = WezTermTarget.detect(run)
+        run = FakeRun({LIST_CLIENTS: clients((7, 0))})
+        target = WezTermTarget.detect(run, desktop=FakeDesktop("42"))
         self.assertEqual((target.pane_id, target.window_id), (7, "42"))
 
     def test_send_backspaces_and_insert_via_stdin(self):
@@ -70,13 +90,14 @@ class WezTermTests(unittest.TestCase):
         self.assertEqual(run.calls, [])
 
     def test_still_focused_needs_same_pane_and_window(self):
-        run = FakeRun({LIST_CLIENTS: clients((7, 0)), ACTIVE_WINDOW: "42\n"})
-        self.assertTrue(WezTermTarget(7, "42", run).still_focused())
-        self.assertFalse(WezTermTarget(8, "42", run).still_focused())
+        run = FakeRun({LIST_CLIENTS: clients((7, 0))})
+        d = FakeDesktop("42")
+        self.assertTrue(WezTermTarget(7, "42", run, desktop=d).still_focused())
+        self.assertFalse(WezTermTarget(8, "42", run, desktop=d).still_focused())
 
     def test_switching_to_another_x_window_is_focus_loss(self):
-        run = FakeRun({LIST_CLIENTS: clients((7, 0)), ACTIVE_WINDOW: "99\n"})
-        self.assertFalse(WezTermTarget(7, "42", run).still_focused())
+        run = FakeRun({LIST_CLIENTS: clients((7, 0))})
+        self.assertFalse(WezTermTarget(7, "42", run, desktop=FakeDesktop("99")).still_focused())
 
 
 LIST_PANES = ("wezterm", "cli", "list", "--format")
@@ -129,48 +150,65 @@ class WezTermLineContextTests(unittest.TestCase):
                          ("fix the", ""))
 
 
-class XdotoolTests(unittest.TestCase):
+class KeyboardTargetTests(unittest.TestCase):
     def test_send_backspace_then_type(self):
-        run = FakeRun()
-        self.assertTrue(XdotoolTarget("42", run).send(Edit(2, "hi")))
-        self.assertEqual(run.calls[0][0], ["xdotool", "key", "--clearmodifiers", "--delay", "8",
-                                           "--repeat", "2", "BackSpace"])
-        self.assertEqual(run.calls[1][0], ["xdotool", "type", "--clearmodifiers", "--delay", "8",
-                                           "--", "hi"])
+        d = FakeDesktop()
+        self.assertTrue(KeyboardTarget("42", d).send(Edit(2, "hi")))
+        self.assertEqual(d.calls, [("key", "BackSpace", 2, 8), ("type", "hi", False, 8)])
+
+    def test_terminal_flag_reaches_type_text(self):
+        d = FakeDesktop()
+        KeyboardTarget("42", d, terminal=True).send(Edit(0, "hi"))
+        self.assertEqual(d.calls, [("type", "hi", True, 8)])
 
     def test_append_only_skips_backspace(self):
-        run = FakeRun()
-        XdotoolTarget("42", run).send(Edit(0, "hi"))
-        self.assertEqual(len(run.calls), 1)
+        d = FakeDesktop()
+        KeyboardTarget("42", d).send(Edit(0, "hi"))
+        self.assertEqual(len(d.calls), 1)
 
     def test_failed_backspace_stops_before_typing(self):
-        run = FakeRun(returncode=1)
-        self.assertFalse(XdotoolTarget("42", run).send(Edit(2, "hi")))
-        self.assertEqual(len(run.calls), 1)
+        d = FakeDesktop(ok=False)
+        self.assertFalse(KeyboardTarget("42", d).send(Edit(2, "hi")))
+        self.assertEqual(len(d.calls), 1)
 
-    def test_still_focused_compares_window(self):
-        run = FakeRun({ACTIVE_WINDOW: "42\n"})
-        self.assertTrue(XdotoolTarget("42", run).still_focused())
-        self.assertFalse(XdotoolTarget("43", run).still_focused())
+    def test_name_is_keyboard(self):
+        self.assertEqual(KeyboardTarget.name, "keyboard")
+
+    def test_keyboard_target_still_focused_uses_desktop(self):
+        d = FakeDesktop("42")
+        self.assertTrue(KeyboardTarget("42", d).still_focused())
+        self.assertFalse(KeyboardTarget("43", d).still_focused())
+
+    def test_enter_and_cursor_keys(self):
+        d = FakeDesktop()
+        t = KeyboardTarget("42", d)
+        t.press_enter()
+        self.assertEqual(d.calls, [("key", "Return", 1, None)])
 
 
 class ChooseTargetTests(unittest.TestCase):
     def test_wezterm_class_gives_wezterm_target(self):
-        run = FakeRun({LIST_CLIENTS: clients((5, 0)), ACTIVE_WINDOW: "42\n"})
-        target = choose_target('WM_CLASS(STRING) = "org.wezfurlong.wezterm", "org.wezfurlong.wezterm"', run)
+        run = FakeRun({LIST_CLIENTS: clients((5, 0))})
+        target = choose_target('WM_CLASS(STRING) = "org.wezfurlong.wezterm", "org.wezfurlong.wezterm"',
+                               run, achat_detect=lambda run, desktop=None: None, desktop=FakeDesktop("42"))
         self.assertIsInstance(target, WezTermTarget)
         self.assertEqual(target.pane_id, 5)
 
     def test_other_class_gives_xdotool(self):
-        run = FakeRun({ACTIVE_WINDOW: "42\n"})
-        self.assertIsInstance(choose_target('WM_CLASS(STRING) = "firefox", "firefox"', run), XdotoolTarget)
+        t = choose_target('WM_CLASS(STRING) = "firefox", "firefox"', FakeRun(), desktop=FakeDesktop("42"))
+        self.assertIsInstance(t, KeyboardTarget)
 
     def test_wezterm_unreachable_falls_back_to_xdotool(self):
-        run = FakeRun({ACTIVE_WINDOW: "42\n"})
-        self.assertIsInstance(choose_target("wezterm", run), XdotoolTarget)
+        t = choose_target("wezterm", FakeRun(), achat_detect=lambda run, desktop=None: None,
+                          desktop=FakeDesktop("42"))
+        self.assertIsInstance(t, KeyboardTarget)
+
+    def test_terminal_class_sets_terminal_flag(self):
+        t = choose_target('WM_CLASS(STRING) = "kitty", "kitty"', FakeRun(), desktop=FakeDesktop("42"))
+        self.assertTrue(t.terminal)
 
     def test_nothing_focused_is_none(self):
-        self.assertIsNone(choose_target(None, FakeRun()))
+        self.assertIsNone(choose_target(None, FakeRun(), desktop=FakeDesktop(None)))
 
 
 if __name__ == "__main__":

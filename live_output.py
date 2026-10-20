@@ -35,15 +35,13 @@ def wezterm_focused_pane(run=subprocess.run):
     return None if best is None else best[1]
 
 
-def xdotool_active_window(run=subprocess.run):
-    """X id of the active window as a string, or None."""
+def active_window(desktop=None):
+    """Id of the active window as a string, or None."""
+    from desktop import get_desktop
     try:
-        res = run(["xdotool", "getactivewindow"], capture_output=True, text=True, timeout=1)
+        return (desktop or get_desktop()).active_window()
     except Exception:
         return None
-    if res.returncode != 0:
-        return None
-    return (res.stdout or "").strip() or None
 
 
 _TERMINALS = ("wezterm", "terminal", "konsole", "kitty", "alacritty", "xterm", "terminator",
@@ -64,13 +62,13 @@ def clipboard_key(action, terminal):
     return {"paste": "ctrl+v", "copy": "ctrl+c", "cut": "ctrl+x"}.get(action)
 
 
-def press_key(key, run=subprocess.run):
+def press_key(key, desktop=None):
     """Press a key chord in the focused window."""
+    from desktop import get_desktop
     try:
-        res = run(["xdotool", "key", "--clearmodifiers", key], capture_output=True, timeout=5)
+        return bool((desktop or get_desktop()).key(key))
     except Exception:
         return False
-    return res.returncode == 0
 
 
 _PROMPT_MARKS = ("$ ", "# ", "% ", "> ", "\u276f ", "\u276f\u00a0", "\u203a ", "\u203a\u00a0")
@@ -205,18 +203,22 @@ class WezTermTarget:
 
     name = "wezterm"
 
-    def __init__(self, pane_id, window_id, run=subprocess.run):
+    def __init__(self, pane_id, window_id, run=subprocess.run, desktop=None):
+        from desktop import get_desktop
         self.pane_id = int(pane_id)
         self.window_id = str(window_id)
         self._run = run
+        self._desktop = desktop or get_desktop()
 
     @classmethod
-    def detect(cls, run=subprocess.run):
-        window = xdotool_active_window(run)
+    def detect(cls, run=subprocess.run, desktop=None):
+        from desktop import get_desktop
+        desktop = desktop or get_desktop()
+        window = active_window(desktop)
         pane = wezterm_focused_pane(run)
         if window is None or pane is None:
             return None
-        return cls(pane, window, run)
+        return cls(pane, window, run, desktop)
 
     def send(self, edit):
         text = "\x7f" * edit.backspace + edit.insert
@@ -232,7 +234,7 @@ class WezTermTarget:
         return res.returncode == 0
 
     def still_focused(self):
-        if xdotool_active_window(self._run) != self.window_id:
+        if active_window(self._desktop) != self.window_id:
             return False
         return wezterm_focused_pane(self._run) == self.pane_id
 
@@ -265,7 +267,7 @@ class WezTermTarget:
     def clipboard(self, action):
         """Paste / copy with the terminal's own keys (cut: none)."""
         key = clipboard_key(action, terminal=True)
-        return bool(key) and press_key(key, self._run)
+        return bool(key) and press_key(key, self._desktop)
 
     SCREEN_ROWS = 15  # the input box sits near the bottom of the pane
 
@@ -300,48 +302,42 @@ class WezTermTarget:
         return None if context is None else (context[0], "")
 
 
-class XdotoolTarget:
-    """Types into the active X window with xdotool."""
+class KeyboardTarget:
+    """Types into the focused window through the desktop backend."""
 
-    name = "xdotool"
+    name = "keyboard"
 
-    def __init__(self, window_id, run=subprocess.run, terminal=False):
+    def __init__(self, window_id, desktop=None, terminal=False):
+        from desktop import get_desktop
         self.window_id = str(window_id)
-        self._run = run
+        self._desktop = desktop or get_desktop()
         self.terminal = terminal  # a terminal other than WezTerm: its clipboard keys
 
     def clipboard(self, action):
         key = clipboard_key(action, self.terminal)
-        return bool(key) and press_key(key, self._run)
+        return bool(key) and press_key(key, self._desktop)
 
     @classmethod
-    def detect(cls, run=subprocess.run):
-        window = xdotool_active_window(run)
-        return cls(window, run) if window else None
+    def detect(cls, desktop=None):
+        from desktop import get_desktop
+        desktop = desktop or get_desktop()
+        window = active_window(desktop)
+        return cls(window, desktop) if window else None
 
     def send(self, edit):
         try:
             if edit.backspace > 0:
-                res = self._run(
-                    ["xdotool", "key", "--clearmodifiers", "--delay", "8",
-                     "--repeat", str(edit.backspace), "BackSpace"],
-                    capture_output=True, timeout=10,
-                )
-                if res.returncode != 0:
+                if not self._desktop.key("BackSpace", repeat=edit.backspace, delay_ms=8):
                     return False
             if edit.insert:
-                res = self._run(
-                    ["xdotool", "type", "--clearmodifiers", "--delay", "8", "--", edit.insert],
-                    capture_output=True, timeout=30,
-                )
-                if res.returncode != 0:
+                if not self._desktop.type_text(edit.insert, terminal=self.terminal, delay_ms=8):
                     return False
         except Exception:
             return False
         return True
 
     def still_focused(self):
-        return xdotool_active_window(self._run) == self.window_id
+        return active_window(self._desktop) == self.window_id
 
     def press_enter(self):
         return self._key("Return")
@@ -353,33 +349,31 @@ class XdotoolTarget:
         return self._key("ctrl+Left" if move.direction < 0 else "ctrl+Right", repeat=move.count)
 
     def _key(self, key, repeat=1):
-        cmd = ["xdotool", "key", "--clearmodifiers"]
-        if repeat > 1:
-            cmd += ["--repeat", str(repeat)]
         try:
-            res = self._run(cmd + [key], capture_output=True, timeout=10)
+            return bool(self._desktop.key(key, repeat=repeat))
         except Exception:
             return False
-        return res.returncode == 0
 
 
-def choose_target(wm_class, run=subprocess.run, achat_detect=None):
+def choose_target(wm_class, run=subprocess.run, achat_detect=None, desktop=None):
     """Best target for the focused window.
 
     In WezTerm: the pane's `achat run` input socket when there is one, else
-    the pane itself. Anything else: xdotool.
+    the pane itself. Anything else: the desktop keyboard.
     """
+    from desktop import get_desktop
+    desktop = desktop or get_desktop()
     if "wezterm" in (wm_class or "").lower():
         if achat_detect is None:
             from live_achat import AchatTarget
             achat_detect = AchatTarget.detect
-        target = achat_detect(run)
+        target = achat_detect(run, desktop=desktop)
         if target is not None:
             return target
-        target = WezTermTarget.detect(run)
+        target = WezTermTarget.detect(run, desktop)
         if target is not None:
             return target
-    target = XdotoolTarget.detect(run)
+    target = KeyboardTarget.detect(desktop)
     if target is not None:
         target.terminal = is_terminal(wm_class)
     return target
