@@ -318,13 +318,37 @@ class FactoryTests(unittest.TestCase):
 
     def test_get_desktop_picks_by_session_type(self):
         desktop._desktop = None
-        self.assertIsInstance(get_desktop({"XDG_SESSION_TYPE": "wayland"}), GnomeWaylandDesktop)
-        self.assertIsInstance(get_desktop(), GnomeWaylandDesktop)  # cached
+        up = lambda: _FakeWayland(True)
+        self.assertIsInstance(get_desktop({"XDG_SESSION_TYPE": "wayland"}, make_wayland=up), _FakeWayland)
+        self.assertIsInstance(get_desktop(), _FakeWayland)  # cached
         desktop._desktop = None
         self.assertIsInstance(get_desktop({"XDG_SESSION_TYPE": "x11"}), X11Desktop)
         desktop._desktop = None
         self.assertIsInstance(get_desktop({}), X11Desktop)
 
+    def test_wayland_without_extension_falls_back_to_xwayland(self):
+        desktop._desktop = None
+        d = get_desktop({"XDG_SESSION_TYPE": "wayland", "DISPLAY": ":0"},
+                        make_wayland=lambda: _FakeWayland(False))
+        self.assertIsInstance(d, X11Desktop)
+        self.assertTrue(d.xwayland_fallback)
+
+    def test_wayland_without_extension_or_xwayland_keeps_wayland_desktop(self):
+        desktop._desktop = None
+        d = get_desktop({"XDG_SESSION_TYPE": "wayland"}, make_wayland=lambda: _FakeWayland(False))
+        self.assertIsInstance(d, _FakeWayland)
+
+    def test_plain_x11_is_not_a_fallback(self):
+        desktop._desktop = None
+        self.assertFalse(get_desktop({"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"}).xwayland_fallback)
+
+
+class _FakeWayland:
+    def __init__(self, up):
+        self._up = up
+
+    def available(self):
+        return self._up
 
 if __name__ == "__main__":
     unittest.main()

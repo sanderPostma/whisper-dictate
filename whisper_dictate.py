@@ -2511,7 +2511,7 @@ class WhisperDictate:
 
     def _check_desktop(self):
         """Warn (and keep running) when the Wayland Shell extension is missing."""
-        if not self.desktop.available():
+        if not self.desktop.available() or getattr(self.desktop, "xwayland_fallback", False):
             msg = "✗ GNOME extension whisper-dictate not active — run ./install-gnome-extension.sh and log out/in"
             print(msg)
             self.notify(msg)
@@ -2586,8 +2586,14 @@ class WhisperDictate:
         # Run GTK main loop
         # SIGINT/SIGTERM leave the main loop normally so the hotkey grabs are
         # released (a stale grab would make the next start's grab fail).
+        try:
+            gi.require_version('GLibUnix', '2.0')
+            from gi.repository import GLibUnix
+            signal_add = GLibUnix.signal_add
+        except (ValueError, ImportError):
+            signal_add = GLib.unix_signal_add  # GLib < 2.80
         for sig in (signal.SIGINT, signal.SIGTERM):
-            GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, self._on_terminate_signal)
+            signal_add(GLib.PRIORITY_DEFAULT, sig, self._on_terminate_signal)
         try:
             Gtk.main()
         finally:

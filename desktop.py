@@ -23,8 +23,11 @@ def _thread_spawn(fn):
 
 
 class X11Desktop:
-    def __init__(self, run=subprocess.run):
+    def __init__(self, run=subprocess.run, xwayland_fallback=False):
         self._run = run
+        # Standing in for a Wayland session whose Shell extension is not loaded
+        # yet: xdotool still sees XWayland windows.
+        self.xwayland_fallback = xwayland_fallback
         self._bound = []
 
     def available(self):
@@ -277,11 +280,13 @@ class GnomeWaylandDesktop:
 _desktop = None
 
 
-def get_desktop(env=os.environ):
+def get_desktop(env=os.environ, make_wayland=None):
     global _desktop
     if _desktop is None:
         if env.get("XDG_SESSION_TYPE", "").lower() == "wayland":
-            _desktop = GnomeWaylandDesktop()
+            _desktop = (make_wayland or GnomeWaylandDesktop)()
+            if not _desktop.available() and env.get("DISPLAY"):
+                _desktop = X11Desktop(xwayland_fallback=True)
         else:
             _desktop = X11Desktop()
     return _desktop

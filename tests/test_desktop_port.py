@@ -94,6 +94,15 @@ class DesktopPortTests(unittest.TestCase):
         pr.assert_any_call(MISSING)
         a.notify.assert_called_once_with(MISSING)
 
+    def test_xwayland_fallback_still_warns(self):
+        d = FakeDesktop(available=True)
+        d.xwayland_fallback = True
+        a = app(d)
+        a.notify = mock.Mock()
+        with mock.patch("builtins.print") as pr:
+            a._check_desktop()
+        pr.assert_any_call(MISSING)
+
     def test_available_desktop_is_silent(self):
         a = app(FakeDesktop())
         a.notify = mock.Mock()
