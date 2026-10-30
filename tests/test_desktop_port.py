@@ -9,7 +9,9 @@ import whisper_dictate
 from desktop import GnomeWaylandDesktop
 from whisper_dictate import WhisperDictate
 
-MISSING = "✗ GNOME extension whisper-dictate not active — run ./install-gnome-extension.sh and log out/in"
+MISSING = ("✗ GNOME extension whisper-dictate not active — run "
+           "./install-gnome-extension.sh (if it stays inactive: "
+           "gsettings set org.gnome.shell disable-user-extensions false)")
 
 
 class FakeDesktop:

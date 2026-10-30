@@ -8,5 +8,17 @@ rm -rf "$DEST"
 mkdir -p "$DEST"
 cp -r "$SRC"/. "$DEST"/
 echo "Installed to $DEST"
+# A global "all user extensions off" switch silently overrides per-extension
+# enabling, leaving the helper INITIALIZED and the app on the XWayland fallback.
+if [ "$(gsettings get org.gnome.shell disable-user-extensions)" = "true" ]; then
+    echo "User extensions were globally disabled — re-enabling them"
+    gsettings set org.gnome.shell disable-user-extensions false
+fi
 gnome-extensions enable "$UUID" || echo "(enable failed; it will be enabled after re-login: run 'gnome-extensions enable $UUID')"
-echo "Log out and back in to load it (Wayland cannot restart gnome-shell)"
+
+sleep 1
+if [ "$(gnome-extensions info "$UUID" | awk -F': ' '/State:/{print $2}')" = "ACTIVE" ]; then
+    echo "Extension is ACTIVE — restart whisper-dictate to pick it up"
+else
+    echo "Log out and back in to load it (Wayland cannot restart gnome-shell)"
+fi

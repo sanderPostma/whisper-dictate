@@ -33,7 +33,8 @@ detection go through a small GNOME Shell extension shipped in `gnome-extension/`
 
 ```bash
 ./install-gnome-extension.sh
-# then log out and back in — Wayland cannot reload gnome-shell in place
+# it prints whether the extension went ACTIVE straight away; if not,
+# log out and back in — Wayland cannot reload gnome-shell in place
 ```
 
 Text is inserted by putting it on the clipboard and pressing the paste key
@@ -313,6 +314,15 @@ cp ~/.local/share/applications/whisper-dictate.desktop ~/.config/autostart/
 ### Hotkey not working
 - Wayland: check the extension is active: `gnome-extensions info whisper-dictate@whisper-dictate.local`
   (the app prints `✗ GNOME extension whisper-dictate not active` at startup if not)
+- If that reports `Enabled: No` / `State: INITIALIZED` even after enabling it, the
+  global kill switch for user extensions is on. Turn it off — it takes effect at
+  once, no re-login needed — then restart whisper-dictate:
+  ```bash
+  gsettings set org.gnome.shell disable-user-extensions false
+  ```
+  While the extension is inactive the app falls back to xdotool under XWayland,
+  which on GNOME 49+ makes the "Remote Desktop — Allow Remote Interaction" portal
+  dialog pop up on every synthetic key press or window activation.
 - Check if another app uses the same hotkey
 
 ### Tray icon not showing

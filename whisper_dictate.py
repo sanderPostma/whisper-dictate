@@ -2512,7 +2512,9 @@ class WhisperDictate:
     def _check_desktop(self):
         """Warn (and keep running) when the Wayland Shell extension is missing."""
         if not self.desktop.available() or getattr(self.desktop, "xwayland_fallback", False):
-            msg = "✗ GNOME extension whisper-dictate not active — run ./install-gnome-extension.sh and log out/in"
+            msg = ("✗ GNOME extension whisper-dictate not active — run "
+                   "./install-gnome-extension.sh (if it stays inactive: "
+                   "gsettings set org.gnome.shell disable-user-extensions false)")
             print(msg)
             self.notify(msg)
 
