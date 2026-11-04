@@ -249,6 +249,73 @@ class WaylandTests(unittest.TestCase):
         d.type_text("x")
         self.assertAlmostEqual(sleeps[0], 0.15)
 
+    def _rebind_desktop(self):
+        class SeqCall(FakeCall):
+            """GrabAccelerator hands out fresh action ids; fails while `down`."""
+            def __init__(self):
+                super().__init__()
+                self.next_id, self.down = 10, False
+            def __call__(self, method, args=None):
+                self.calls.append((method, args))
+                if self.down:
+                    raise GLib.Error("extension disabled")
+                if method == "GrabAccelerator":
+                    self.next_id += 1
+                    return (self.next_id,)
+                return (True,)
+        call, timers = SeqCall(), []
+        d = GnomeWaylandDesktop(call=call, run=FakeRun(), sleep=lambda s: None, spawn=now,
+                                timeout=lambda ms, fn: timers.append(fn))
+        d._sub = object()
+        fired = []
+        d.bind_hotkey("<Alt>d", lambda: fired.append("d"))
+        d.bind_hotkey("<Alt>l", lambda: fired.append("l"))
+        return d, call, timers, fired
+
+    def _grabs(self, call):
+        return [a[0] for m, a in call.calls if m == "GrabAccelerator"]
+
+    def test_extension_ready_signal_regrabs_all_hotkeys(self):
+        # The Shell disables extensions on screen lock, dropping every grab;
+        # on re-enable it announces Ready and the app must grab again.
+        d, call, _, fired = self._rebind_desktop()
+        old = set(d._actions)
+        d._on_signal(None, None, None, desktop.INTERFACE, "Ready", GLib.Variant("()", ()))
+        self.assertEqual(self._grabs(call), ["<Alt>d", "<Alt>l", "<Alt>d", "<Alt>l"])
+        self.assertFalse(old & set(d._actions))
+        for cb in d._actions.values():
+            cb()
+        self.assertEqual(sorted(fired), ["d", "l"])
+
+    def test_unlock_regrabs_and_retries_until_extension_is_back(self):
+        d, call, timers, fired = self._rebind_desktop()
+        call.down = True
+        d._on_signal(None, None, None, "org.gnome.ScreenSaver", "ActiveChanged",
+                     GLib.Variant("(b)", (False,)))
+        self.assertEqual(len(timers), 1)
+        tick = timers.pop()  # GLib repeats it while it returns True
+        self.assertTrue(tick())  # extension still disabled: keep retrying
+        call.down = False
+        self.assertFalse(tick())  # grabbed: stop
+        self.assertEqual(self._grabs(call)[-2:], ["<Alt>d", "<Alt>l"])
+        self.assertEqual(len(d._actions), 2)
+
+    def test_unlock_retry_gives_up_eventually(self):
+        d, call, timers, _ = self._rebind_desktop()
+        call.down = True
+        d._on_signal(None, None, None, "org.gnome.ScreenSaver", "ActiveChanged",
+                     GLib.Variant("(b)", (False,)))
+        tick = timers.pop()
+        results = [tick() for _ in range(100)]
+        self.assertIn(False, results)
+
+    def test_screen_locking_does_not_regrab(self):
+        d, call, timers, _ = self._rebind_desktop()
+        n = len(call.calls)
+        d._on_signal(None, None, None, "org.gnome.ScreenSaver", "ActiveChanged",
+                     GLib.Variant("(b)", (True,)))
+        self.assertEqual((len(call.calls), timers), (n, []))
+
     def test_clipboard_set_failure_skips_paste(self):
         d, call, run = self.make(run=FakeRun({("wl-copy",): 1}))
         self.assertFalse(d.type_text("x"))

@@ -10,6 +10,7 @@ from gi.repository import Gio, GLib
 BUS_NAME = "org.gnome.Shell"
 OBJECT_PATH = "/org/whisperdictate/Shell"
 INTERFACE = "org.whisperdictate.Shell"
+SCREENSAVER = "org.gnome.ScreenSaver"
 _SIGNATURES = {
     "ActivateWindow": "(s)",
     "PressKeys": "(su)",
@@ -124,13 +125,15 @@ class GnomeWaylandDesktop:
     modifier_window_s = 1.0
 
     def __init__(self, call=None, run=subprocess.run, sleep=time.sleep, spawn=_thread_spawn,
-                 clock=time.monotonic):
+                 clock=time.monotonic, timeout=None):
         self._call = call or self._dbus_call
+        self._timeout = timeout or GLib.timeout_add
         self._run = run
         self._sleep = sleep
         self._spawn = spawn
         self._clock = clock
         self._actions = {}
+        self._bindings = {}  # accel -> callback, so grabs can be renewed
         self._sub = None
         # Re-entrant: type_text holds it across its own key() call.
         self._lock = threading.RLock()
@@ -247,7 +250,33 @@ class GnomeWaylandDesktop:
         self._spawn(restore)
         return ok
 
+    # The Shell disables extensions while the screen is locked, which drops every
+    # grab; after unlock the extension is back but holds nothing. Grabs are
+    # renewed when the extension announces Ready, and on unlock (for an
+    # extension loaded before Ready existed; it may come back a moment later).
+    rebind_interval_ms = 500
+    rebind_attempts = 20
+
     def bind_hotkey(self, accel, callback):
+        self._bindings[accel] = callback
+        if not self._grab(accel, callback):
+            return False
+        if self._sub is None:
+            try:
+                bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+                self._sub = [
+                    bus.signal_subscribe(
+                        BUS_NAME, INTERFACE, None, OBJECT_PATH, None,
+                        Gio.DBusSignalFlags.NONE, self._on_signal),
+                    bus.signal_subscribe(
+                        None, SCREENSAVER, "ActiveChanged", "/org/gnome/ScreenSaver", None,
+                        Gio.DBusSignalFlags.NONE, self._on_signal),
+                ]
+            except GLib.Error:
+                return False
+        return True
+
+    def _grab(self, accel, callback):
         res = self._try("GrabAccelerator", (accel,))
         action = res[0] if res else 0
         if not action:
@@ -255,26 +284,46 @@ class GnomeWaylandDesktop:
         def dispatch(cb=callback):
             self._hotkey_fired_at = self._clock()
             return cb()
+        dispatch.accel = accel
+        for old in [a for a, cb in self._actions.items() if cb.accel == accel]:
+            del self._actions[old]
         self._actions[action] = dispatch
-        if self._sub is None:
-            try:
-                bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-                self._sub = bus.signal_subscribe(
-                    BUS_NAME, INTERFACE, "AcceleratorActivated", OBJECT_PATH, None,
-                    Gio.DBusSignalFlags.NONE, self._on_signal)
-            except GLib.Error:
-                return False
         return True
 
-    def _on_signal(self, _conn, _sender, _path, _iface, _signal, params, *_):
-        cb = self._actions.get(params.unpack()[0])
-        if cb:
-            GLib.idle_add(lambda: (cb(), False)[1])
+    def rebind(self):
+        """Grab every bound hotkey again; True when all succeeded."""
+        self._actions = {}
+        ok = True
+        for accel, callback in list(self._bindings.items()):
+            ok = self._grab(accel, callback) and ok
+        return ok
+
+    def _rebind_until_ok(self):
+        left = [self.rebind_attempts]
+        def tick():
+            left[0] -= 1
+            return not self.rebind() and left[0] > 0
+        self._timeout(self.rebind_interval_ms, tick)
+
+    def _on_signal(self, _conn, _sender, _path, iface, signal, params, *_):
+        if iface == INTERFACE and signal == "AcceleratorActivated":
+            cb = self._actions.get(params.unpack()[0])
+            if cb:
+                GLib.idle_add(lambda: (cb(), False)[1])
+        elif iface == INTERFACE and signal == "Ready":
+            if self._bindings:
+                print("[whisper-dictate] Shell extension re-enabled, renewing hotkeys")
+                self.rebind()
+        elif iface == SCREENSAVER and signal == "ActiveChanged":
+            if not params.unpack()[0] and self._bindings:
+                print("[whisper-dictate] Screen unlocked, renewing hotkeys")
+                self._rebind_until_ok()
 
     def unbind_all(self):
         for action in list(self._actions):
             self._try("UngrabAccelerator", (action,))
         self._actions = {}
+        self._bindings = {}
 
 
 _desktop = None

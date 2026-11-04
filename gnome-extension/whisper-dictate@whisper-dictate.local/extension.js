@@ -39,6 +39,7 @@ const IFACE_XML = `
     <signal name="AcceleratorActivated">
       <arg type="u" name="action"/>
     </signal>
+    <signal name="Ready"/>
   </interface>
 </node>`;
 
@@ -104,6 +105,9 @@ export default class WhisperDictateExtension extends Extension {
 
         this._dbus = Gio.DBusExportedObject.wrapJSObject(IFACE_XML, this);
         this._dbus.export(Gio.DBus.session, '/org/whisperdictate/Shell');
+        // The Shell disables extensions on screen lock, which drops every grab.
+        // Tell clients we are back so they grab their accelerators again.
+        this._dbus.emit_signal('Ready', null);
     }
 
     disable() {
@@ -246,6 +250,6 @@ export default class WhisperDictateExtension extends Extension {
     }
 
     Version() {
-        return 1;
+        return 2;
     }
 }
